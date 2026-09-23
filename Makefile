@@ -5,7 +5,7 @@ ARGS ?=
 
 .DEFAULT_GOAL := help
 
-.PHONY: help check ci lint fmt-check fmt format test build package publish-dry-run publish clean run
+.PHONY: help check ci lint fmt-check fmt format test schema schema-check build package publish-dry-run publish clean run
 
 help: ## Show available developer commands.
 	@printf '\033[1mdkr developer commands\033[0m\n'
@@ -21,6 +21,9 @@ help: ## Show available developer commands.
 	@printf '  \033[36mformat\033[0m      Alias for fmt\n\n'
 	@printf '\033[1mTests\033[0m\n'
 	@printf '  \033[36mtest\033[0m        Run all tests\n\n'
+	@printf '\033[1mSchema\033[0m\n'
+	@printf '  \033[36mschema\033[0m       Regenerate schema.json from the Profile struct\n'
+	@printf '  \033[36mschema-check\033[0m Fail if schema.json is out of date\n\n'
 	@printf '\033[1mBuild And Release\033[0m\n'
 	@printf '  \033[36mbuild\033[0m       Build release binary\n'
 	@printf '  \033[36mpackage\033[0m     Verify crates.io package contents\n'
@@ -32,7 +35,7 @@ help: ## Show available developer commands.
 	@printf '\033[1mVariables\033[0m\n'
 	@printf '  ARGS=%s\n' '$(ARGS)'
 
-check: lint test ## Format check, build-check, and run all tests.
+check: lint test schema-check ## Format check, build-check, run all tests, and check schema.json is current.
 
 ci: check ## Alias for check.
 
@@ -49,6 +52,15 @@ format: fmt ## Alias for fmt.
 
 test: ## Run all tests.
 	$(CARGO) test $(ARGS)
+
+schema: ## Regenerate schema.json from the Profile struct.
+	$(CARGO) run --quiet -- --schema > schema.json
+
+schema-check: ## Fail if schema.json is out of date.
+	@$(CARGO) run --quiet -- --schema > /tmp/dkr-schema-check.json
+	@diff -u schema.json /tmp/dkr-schema-check.json || \
+		(echo "schema.json is out of date; run 'make schema' and commit it." >&2; exit 1)
+	@rm -f /tmp/dkr-schema-check.json
 
 build: ## Build release binary.
 	$(CARGO) build --release

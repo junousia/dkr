@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Profile",
+  "description": "A named dkr profile: settings applied to `docker run` for one image.\nOnly `image` is required.",
+  "type": "object",
+  "properties": {
+    "entrypoint": {
+      "description": "Overrides the image's entrypoint (`--entrypoint`).",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "env": {
+      "description": "Environment variables passed into the container (`-e KEY=VALUE`).\nValues support `~` and `$VAR`/`${VAR}` expansion.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {}
+    },
+    "extra_args": {
+      "description": "Raw extra `docker run` flags, appended verbatim before the image.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string"
+      }
+    },
+    "image": {
+      "description": "The docker image to run, e.g. \"myorg/myimage:latest\".",
+      "type": "string"
+    },
+    "init": {
+      "description": "Run docker's `--init` so the container's main process isn't PID 1,\nmeaning it gets normal signal handling (e.g. Ctrl-C actually works).\nDefaults to true; set to false to opt out.",
+      "type": "boolean",
+      "default": true
+    },
+    "network": {
+      "description": "Docker network mode, e.g. \"host\" (`--network`).",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "ports": {
+      "description": "Port mappings as \"host:container\" strings (`-p`).",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string"
+      }
+    },
+    "user": {
+      "description": "User to run as inside the container, e.g. \"1000:1000\" (`-u`).",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "volumes": {
+      "description": "Bind mounts (`-v host:container[:options]`).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Volume"
+      }
+    },
+    "workdir": {
+      "description": "Working directory inside the container (`-w`).",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "image"
+  ],
+  "$defs": {
+    "Volume": {
+      "description": "A bind mount: `host` is mounted into the container at `container`.",
+      "type": "object",
+      "properties": {
+        "container": {
+          "description": "Path inside the container to mount it at.",
+          "type": "string"
+        },
+        "host": {
+          "description": "Host path to mount. Supports `~` and `$VAR`/`${VAR}` expansion.",
+          "type": "string"
+        },
+        "options": {
+          "description": "Extra mount options appended after a third `:`, e.g. \"ro\".",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "host",
+        "container"
+      ]
+    }
+  }
+}

@@ -67,6 +67,30 @@ Running `dkr myimage` then applies all of that automatically. See
 [`examples/example.yaml`](examples/example.yaml) for a copy-pasteable
 starting point.
 
+## Schema and validation
+
+`dkr --schema` prints a JSON Schema for the profile format, derived directly
+from the code so it can't drift out of sync. It's self-contained (no need to
+clone this repo) and useful for editor autocomplete/validation, or for any
+other tool or agent that wants to generate or check a profile:
+
+```bash
+dkr --schema > ~/.config/dkr/schema.json
+```
+
+Then reference it from a profile file for editor support (VS Code/JetBrains
+with a YAML language server extension):
+
+```yaml
+# yaml-language-server: $schema=./schema.json
+image: myorg/myimage:latest
+```
+
+`dkr <profile> --validate` checks a profile without running docker: unknown
+fields are rejected at parse time (with a message listing the valid field
+names), and `--validate` additionally checks for common mistakes like empty
+paths or malformed `ports` entries.
+
 ## Verify
 
 ```bash

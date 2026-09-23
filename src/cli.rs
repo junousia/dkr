@@ -14,6 +14,16 @@ pub struct Cli {
     #[arg(long)]
     pub dry_run: bool,
 
+    /// Print the profile JSON Schema (for editor autocomplete/validation or
+    /// standalone tooling) and exit. Ignores any profile argument.
+    #[arg(long)]
+    pub schema: bool,
+
+    /// Validate the given profile (structure and field sanity) without
+    /// running docker.
+    #[arg(long)]
+    pub validate: bool,
+
     /// Directory containing profile YAML files (overrides $DKR_CONFIG_DIR and ~/.config/dkr).
     #[arg(long)]
     pub config_dir: Option<PathBuf>,

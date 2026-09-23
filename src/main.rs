@@ -4,7 +4,7 @@ use anyhow::{bail, Context, Result};
 use clap::Parser;
 
 use dkr::cli::Cli;
-use dkr::config::{list_profiles, resolve_config_dir, Profile};
+use dkr::config::{list_profiles, resolve_config_dir, schema_json, validate, Profile};
 use dkr::docker_cmd;
 
 fn main() -> ExitCode {
@@ -19,6 +19,11 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: Cli) -> Result<ExitCode> {
+    if cli.schema {
+        println!("{}", schema_json());
+        return Ok(ExitCode::SUCCESS);
+    }
+
     let config_dir = resolve_config_dir(cli.config_dir.clone());
 
     if cli.list {
@@ -38,6 +43,20 @@ fn run(cli: Cli) -> Result<ExitCode> {
     };
 
     let profile = Profile::load(&config_dir, &name)?;
+
+    if cli.validate {
+        let problems = validate(&profile);
+        if problems.is_empty() {
+            println!("profile '{name}' is valid");
+            return Ok(ExitCode::SUCCESS);
+        }
+        eprintln!("profile '{name}' has problems:");
+        for problem in &problems {
+            eprintln!("  - {problem}");
+        }
+        return Ok(ExitCode::FAILURE);
+    }
+
     let interactive = docker_cmd::is_interactive();
     let args = docker_cmd::build_args(&profile, &cli.command, interactive);
 
