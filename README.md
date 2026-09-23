@@ -118,3 +118,10 @@ git push origin v0.1.0
 
 Use `workflow_dispatch` with `dry_run: true` on the `Publish` workflow to
 validate the build/package steps without releasing or publishing anything.
+
+## Contributing
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the development workflow and
+[`AGENTS.md`](AGENTS.md) for the fuller architecture/conventions map (useful
+for AI coding agents and humans alike). Security issues: see
+[`SECURITY.md`](SECURITY.md).
