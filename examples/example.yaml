@@ -1,0 +1,11 @@
+image: myorg/myimage:latest
+volumes:
+  - host: "${PWD}"
+    container: /workspace
+env:
+  FOO: bar
+workdir: /workspace
+user: "1000:1000"
+entrypoint: /bin/bash
+extra_args:
+  - "--cap-add=SYS_PTRACE"

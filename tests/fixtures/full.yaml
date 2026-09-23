@@ -1,0 +1,18 @@
+image: myorg/myimage:latest
+volumes:
+  - host: /home/jukka/project
+    container: /workspace
+  - host: /home/jukka/cache
+    container: /cache
+    options: ro
+env:
+  FOO: bar
+  BAZ: qux
+workdir: /workspace
+user: "1000:1000"
+network: host
+ports:
+  - "8080:80"
+entrypoint: /bin/bash
+extra_args:
+  - "--cap-add=SYS_PTRACE"

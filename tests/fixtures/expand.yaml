@@ -1,0 +1,6 @@
+image: myorg/myimage:latest
+volumes:
+  - host: "${DKR_TEST_HOME}/project"
+    container: /workspace
+env:
+  GREETING: "hello ${DKR_TEST_NAME}"
