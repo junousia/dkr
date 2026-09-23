@@ -8,6 +8,8 @@ semver pre-1.0).
 
 ## [Unreleased]
 
+## [0.1.1]
+
 ### Fixed
 
 - Containers now always run with `--init` (opt out with `init: false` in a
