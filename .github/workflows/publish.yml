@@ -142,14 +142,16 @@ jobs:
           pattern: dkr-*
           path: dist
 
-      - name: Rename binaries per platform
+      - name: Flatten binaries per platform
         run: |
+          mkdir -p flat
           for dir in dist/dkr-*; do
             platform="$(basename "${dir}" | sed 's/^dkr-//')"
-            mv "${dir}/dkr" "dist/dkr-${platform}"
-            chmod 755 "dist/dkr-${platform}"
-            rmdir "${dir}"
+            mv "${dir}/dkr" "flat/dkr-${platform}"
+            chmod 755 "flat/dkr-${platform}"
           done
+          rm -rf dist
+          mv flat dist
           ls -la dist
 
       - name: Create release and upload binaries
