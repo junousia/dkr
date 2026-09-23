@@ -15,14 +15,17 @@ fn load(name: &str) -> Profile {
 fn minimal_profile_builds_bare_run_command() {
     let profile = load("minimal");
     let args = build_args(&profile, &[], false);
-    assert_eq!(args, vec!["run", "--rm", "myorg/myimage:latest"]);
+    assert_eq!(args, vec!["run", "--rm", "--init", "myorg/myimage:latest"]);
 }
 
 #[test]
 fn interactive_flag_adds_it() {
     let profile = load("minimal");
     let args = build_args(&profile, &[], true);
-    assert_eq!(args, vec!["run", "--rm", "-it", "myorg/myimage:latest"]);
+    assert_eq!(
+        args,
+        vec!["run", "--rm", "--init", "-it", "myorg/myimage:latest"]
+    );
 }
 
 #[test]
@@ -32,8 +35,22 @@ fn trailing_command_is_appended_after_image() {
     let args = build_args(&profile, &command, false);
     assert_eq!(
         args,
-        vec!["run", "--rm", "myorg/myimage:latest", "echo", "hi"]
+        vec![
+            "run",
+            "--rm",
+            "--init",
+            "myorg/myimage:latest",
+            "echo",
+            "hi"
+        ]
     );
+}
+
+#[test]
+fn init_false_omits_the_init_flag() {
+    let profile = load("no_init");
+    let args = build_args(&profile, &[], false);
+    assert_eq!(args, vec!["run", "--rm", "myorg/myimage:latest"]);
 }
 
 #[test]
@@ -45,6 +62,7 @@ fn full_profile_orders_every_flag_correctly() {
         vec![
             "run",
             "--rm",
+            "--init",
             "-v",
             "/home/jukka/project:/workspace",
             "-v",
@@ -84,6 +102,7 @@ fn env_and_volume_values_expand_tilde_and_vars() {
         vec![
             "run",
             "--rm",
+            "--init",
             "-v",
             "/home/jukka/project:/workspace",
             "-e",
@@ -96,7 +115,7 @@ fn env_and_volume_values_expand_tilde_and_vars() {
 #[test]
 fn list_profiles_finds_fixture_names_sorted() {
     let names = list_profiles(&fixtures_dir());
-    assert_eq!(names, vec!["expand", "full", "minimal"]);
+    assert_eq!(names, vec!["expand", "full", "minimal", "no_init"]);
 }
 
 #[test]

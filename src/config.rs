@@ -12,13 +12,22 @@ pub struct Volume {
     pub options: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone, Default)]
+fn default_init() -> bool {
+    true
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct Profile {
     pub image: String,
     #[serde(default)]
     pub volumes: Vec<Volume>,
     #[serde(default)]
     pub env: HashMap<String, String>,
+    /// Run docker's `--init` so the container's main process isn't PID 1,
+    /// meaning it gets normal signal handling (e.g. Ctrl-C actually works).
+    /// Defaults to true; set to false to opt out.
+    #[serde(default = "default_init")]
+    pub init: bool,
     #[serde(default)]
     pub workdir: Option<String>,
     #[serde(default)]

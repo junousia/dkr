@@ -19,6 +19,9 @@ fn expand(value: &str) -> String {
 /// side-effect-free so it can be tested without touching docker.
 pub fn build_args(profile: &Profile, command: &[String], interactive: bool) -> Vec<String> {
     let mut args = vec!["run".to_string(), "--rm".to_string()];
+    if profile.init {
+        args.push("--init".to_string());
+    }
     if interactive {
         args.push("-it".to_string());
     }

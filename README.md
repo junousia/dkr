@@ -11,9 +11,11 @@ dkr --list                         # show available profiles
 dkr myimage --dry-run               # print the docker command without running it
 ```
 
-`dkr` always runs containers with `--rm` (ephemeral, one-off) and adds `-it`
-automatically when stdin is a terminal. It is not for long-running services —
-see `docker compose` for that.
+`dkr` always runs containers with `--rm` (ephemeral, one-off) and `--init`
+(so the containerized command isn't PID 1 and gets normal signal handling —
+Ctrl-C actually works), and adds `-it` automatically when stdin is a
+terminal. It is not for long-running services — see `docker compose` for
+that.
 
 ## Install
 
@@ -47,6 +49,7 @@ volumes:
     options: ro          # optional, e.g. "ro"
 env:
   FOO: bar
+init: true                # optional, default true; passes docker's --init
 workdir: /workspace
 user: "1000:1000"
 network: host             # optional
