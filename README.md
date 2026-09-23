@@ -75,3 +75,19 @@ List available developer workflows:
 ```bash
 make help
 ```
+
+## Releasing
+
+CI runs `make check` on every push and pull request. Pushing a tag matching
+`v*.*.*` (the version must match `Cargo.toml`) triggers the publish workflow:
+it builds binaries for Linux (x86_64/arm64) and macOS (x86_64/arm64), creates
+a GitHub Release with those binaries attached, and publishes the crate to
+crates.io.
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Use `workflow_dispatch` with `dry_run: true` on the `Publish` workflow to
+validate the build/package steps without releasing or publishing anything.
