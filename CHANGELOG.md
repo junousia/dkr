@@ -8,6 +8,8 @@ semver pre-1.0).
 
 ## [Unreleased]
 
+## [0.2.0]
+
 ### Added
 
 - `dkr --schema` prints a JSON Schema for the profile format, derived
@@ -15,8 +17,12 @@ semver pre-1.0).
   `schema.json` (kept honest by `make schema-check`, part of `make check`).
   Useful standalone for editor autocomplete/validation or other tooling.
 - `dkr <profile> --validate` checks a profile without running docker.
+
+### Changed
+
 - Unknown fields in a profile YAML are now rejected at parse time (with a
   message listing valid field names), instead of being silently ignored.
+  This can break a profile that previously had an unrecognized field.
 
 ## [0.1.1]
 
