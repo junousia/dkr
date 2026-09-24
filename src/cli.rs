@@ -28,7 +28,9 @@ pub struct Cli {
     #[arg(long)]
     pub config_dir: Option<PathBuf>,
 
-    /// Profile name, matching <config-dir>/<profile>.yaml. Required unless --list.
+    /// Profile name, matching <config-dir>/<profile>.yaml. Required unless
+    /// --list. Append ":tag" (e.g. "myimage:1.0.0") to override the tag on
+    /// the profile's image for this run only.
     pub profile: Option<String>,
 
     /// Command and arguments to run inside the container, overriding the image's default CMD.

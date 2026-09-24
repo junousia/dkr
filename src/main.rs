@@ -4,7 +4,9 @@ use anyhow::{bail, Context, Result};
 use clap::Parser;
 
 use dkr::cli::Cli;
-use dkr::config::{list_profiles, resolve_config_dir, schema_json, validate, Profile};
+use dkr::config::{
+    list_profiles, resolve_config_dir, schema_json, split_profile_arg, validate, with_tag, Profile,
+};
 use dkr::docker_cmd;
 
 fn main() -> ExitCode {
@@ -38,19 +40,27 @@ fn run(cli: Cli) -> Result<ExitCode> {
         return Ok(ExitCode::SUCCESS);
     }
 
-    let Some(name) = cli.profile.clone() else {
+    let Some(arg) = cli.profile.clone() else {
         bail!("a profile name is required (or pass --list to see available profiles)");
     };
+    let (name, tag_override) = split_profile_arg(&arg);
 
-    let profile = Profile::load(&config_dir, &name)?;
+    let mut profile = Profile::load(&config_dir, name)?;
+
+    if let Some(tag) = tag_override {
+        if tag.is_empty() {
+            bail!("empty tag after ':' in '{arg}' - use '<profile>:<tag>'");
+        }
+        profile.image = with_tag(&profile.image, tag);
+    }
 
     if cli.validate {
         let problems = validate(&profile);
         if problems.is_empty() {
-            println!("profile '{name}' is valid");
+            println!("profile '{arg}' is valid (image: {})", profile.image);
             return Ok(ExitCode::SUCCESS);
         }
-        eprintln!("profile '{name}' has problems:");
+        eprintln!("profile '{arg}' has problems:");
         for problem in &problems {
             eprintln!("  - {problem}");
         }

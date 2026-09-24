@@ -7,6 +7,7 @@ you never have to retype `docker run` flags by hand.
 dkr myimage                       # run the image's default command
 dkr myimage -- bash                # run bash inside the container instead
 dkr myimage -- ./scripts/build.sh   # run a script inside the container
+dkr myimage:1.0.0 -- echo hello      # override the profile's image tag for this run
 dkr --list                         # show available profiles
 dkr myimage --dry-run               # print the docker command without running it
 ```
@@ -66,6 +67,19 @@ Only `image` is required. Host paths and env values are expanded, so `~` and
 Running `dkr myimage` then applies all of that automatically. See
 [`examples/example.yaml`](examples/example.yaml) for a copy-pasteable
 starting point.
+
+### Overriding the image tag
+
+Append `:tag` to the profile name to run a different version of the image
+for one invocation, without editing the profile file:
+
+```bash
+dkr myimage:1.0.0 -- echo hello
+```
+
+This replaces the tag (or digest) on the profile's `image`, preserving any
+registry, including one with a port (e.g. `localhost:5000/myimage:latest`
+becomes `localhost:5000/myimage:1.0.0`).
 
 ## Schema and validation
 

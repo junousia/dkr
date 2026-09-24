@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use dkr::config::{schema_json, validate, Profile};
+use dkr::config::{schema_json, split_profile_arg, validate, with_tag, Profile};
 
 fn fixtures_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
@@ -67,4 +67,48 @@ volumes:
     assert!(problems.iter().any(|p| p.contains("volumes[0].host")));
     assert!(problems.iter().any(|p| p.contains("ports[0]")));
     assert!(problems.iter().any(|p| p.contains("extra_args[0]")));
+}
+
+#[test]
+fn split_profile_arg_separates_name_and_tag() {
+    assert_eq!(split_profile_arg("myimage"), ("myimage", None));
+    assert_eq!(
+        split_profile_arg("myimage:1.0.0"),
+        ("myimage", Some("1.0.0"))
+    );
+    assert_eq!(split_profile_arg("myimage:"), ("myimage", Some("")));
+}
+
+#[test]
+fn with_tag_replaces_a_plain_tag() {
+    assert_eq!(
+        with_tag("myorg/myimage:latest", "1.0.0"),
+        "myorg/myimage:1.0.0"
+    );
+}
+
+#[test]
+fn with_tag_adds_a_tag_when_none_present() {
+    assert_eq!(with_tag("myimage", "1.0.0"), "myimage:1.0.0");
+    assert_eq!(with_tag("myorg/myimage", "1.0.0"), "myorg/myimage:1.0.0");
+}
+
+#[test]
+fn with_tag_preserves_a_registry_port() {
+    assert_eq!(
+        with_tag("localhost:5000/myimage:latest", "1.0.0"),
+        "localhost:5000/myimage:1.0.0"
+    );
+    assert_eq!(
+        with_tag("localhost:5000/myimage", "1.0.0"),
+        "localhost:5000/myimage:1.0.0"
+    );
+}
+
+#[test]
+fn with_tag_replaces_a_digest_pin() {
+    assert_eq!(
+        with_tag("myorg/myimage@sha256:abcdef1234", "1.0.0"),
+        "myorg/myimage:1.0.0"
+    );
 }

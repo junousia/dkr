@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use dkr::config::{list_profiles, Profile};
+use dkr::config::{list_profiles, with_tag, Profile};
 use dkr::docker_cmd::{build_args, shell_join};
 
 fn fixtures_dir() -> PathBuf {
@@ -16,6 +16,14 @@ fn minimal_profile_builds_bare_run_command() {
     let profile = load("minimal");
     let args = build_args(&profile, &[], false);
     assert_eq!(args, vec!["run", "--rm", "--init", "myorg/myimage:latest"]);
+}
+
+#[test]
+fn tag_override_end_to_end_replaces_the_image_tag() {
+    let mut profile = load("minimal");
+    profile.image = with_tag(&profile.image, "1.0.0");
+    let args = build_args(&profile, &[], false);
+    assert_eq!(args, vec!["run", "--rm", "--init", "myorg/myimage:1.0.0"]);
 }
 
 #[test]

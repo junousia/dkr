@@ -128,6 +128,30 @@ pub enum ConfigError {
     },
 }
 
+/// Splits a `dkr` positional argument like `myimage:1.0.0` into the profile
+/// name to look up and an optional tag override. Profile names never
+/// contain `:`, so splitting on the first one is unambiguous.
+pub fn split_profile_arg(arg: &str) -> (&str, Option<&str>) {
+    match arg.split_once(':') {
+        Some((name, tag)) => (name, Some(tag)),
+        None => (arg, None),
+    }
+}
+
+/// Replaces the tag (or digest) on a docker image reference, preserving any
+/// registry, which may itself contain a `:port`. Per the image reference
+/// grammar, a `:tag` or `@digest` suffix can only appear after the last `/`,
+/// so registry ports earlier in the string are never mistaken for it.
+pub fn with_tag(image: &str, tag: &str) -> String {
+    let tail_start = image.rfind('/').map_or(0, |i| i + 1);
+    let cut = image[tail_start..].find(['@', ':']).map(|i| tail_start + i);
+    let base = match cut {
+        Some(idx) => &image[..idx],
+        None => image,
+    };
+    format!("{base}:{tag}")
+}
+
 /// Resolves the profile config directory: an explicit override, else
 /// `$DKR_CONFIG_DIR`, else `~/.config/dkr`.
 pub fn resolve_config_dir(override_dir: Option<PathBuf>) -> PathBuf {

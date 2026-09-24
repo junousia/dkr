@@ -8,6 +8,12 @@ semver pre-1.0).
 
 ## [Unreleased]
 
+### Added
+
+- `dkr <profile>:<tag>` overrides the profile's image tag (or digest) for a
+  single run, e.g. `dkr myimage:1.0.0 -- echo hello`, without editing the
+  profile file. Preserves any registry, including one with a port.
+
 ## [0.2.0]
 
 ### Added
