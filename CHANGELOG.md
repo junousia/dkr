@@ -8,6 +8,8 @@ semver pre-1.0).
 
 ## [Unreleased]
 
+## [0.3.0]
+
 ### Added
 
 - `dkr <profile>:<tag>` overrides the profile's image tag (or digest) for a
