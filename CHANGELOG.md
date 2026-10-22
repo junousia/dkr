@@ -8,6 +8,8 @@ semver pre-1.0).
 
 ## [Unreleased]
 
+## [0.5.1]
+
 ### Added
 
 - `install.sh` for `curl ... | sh` installs of the prebuilt release binary;
