@@ -8,6 +8,11 @@ semver pre-1.0).
 
 ## [Unreleased]
 
+### Added
+
+- `install.sh` for `curl ... | sh` installs of the prebuilt release binary;
+  releases now publish a `SHA256SUMS` file it verifies against.
+
 ## [0.5.0]
 
 ### Added

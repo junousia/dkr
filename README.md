@@ -22,13 +22,23 @@ that.
 
 ## Install
 
+Prebuilt binary (Linux/macOS, x86_64/arm64) into `~/.local/bin`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/junousia/dkr/main/install.sh | sh
+```
+
+Set `DKR_VERSION=v0.5.0` to pin a release or `DKR_INSTALL_DIR=/usr/local/bin`
+to change the destination. The script verifies the download against the
+release's `SHA256SUMS` when one is published (releases after 0.5.0).
+
 Build from source:
 
 ```bash
 cargo install --path .
 ```
 
-Or, once published:
+Or from crates.io:
 
 ```bash
 cargo install dkr

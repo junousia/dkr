@@ -152,11 +152,13 @@ jobs:
           done
           rm -rf dist
           mv flat dist
+          (cd dist && sha256sum dkr-* > SHA256SUMS)
           ls -la dist
+          cat dist/SHA256SUMS
 
       - name: Create release and upload binaries
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/dkr-*
+          files: dist/*
           generate_release_notes: true
