@@ -61,7 +61,7 @@ extra_args:
   - "--cap-add=SYS_PTRACE" # optional, raw extra docker run flags
 ```
 
-Only `image` is required. Host paths and env values are expanded, so `~` and
+Only `image` is required (`description` is an optional summary). Host paths and env values are expanded, so `~` and
 `$VAR`/`${VAR}` (including `${PWD}`) work as written above.
 
 They also support command substitution: `$(command)` is run with `sh -c` and
@@ -111,6 +111,23 @@ image: myorg/myimage:latest
 fields are rejected at parse time (with a message listing the valid field
 names), and `--validate` additionally checks for common mistakes like empty
 paths or malformed `ports` entries.
+
+## Using dkr from an agent or script
+
+Everything an agent needs is discoverable from the binary itself, and none
+of these steps touch docker (except as noted):
+
+```bash
+dkr --list --json          # [{name, description, image, error}, ...]
+dkr --schema               # JSON Schema of the profile format
+dkr myimage --validate     # check a profile (runs no commands)
+dkr myimage --dry-run      # print the docker command (runs $(...) values)
+```
+
+Give each profile a `description:` so `--list --json` explains what it is
+for. A profile that fails to parse is reported with an `error` instead of
+being omitted. Exit codes: `0` success, non-zero on any error, and a real run
+exits with the container's own exit code.
 
 ## Verify
 

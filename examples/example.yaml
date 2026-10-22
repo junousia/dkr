@@ -1,4 +1,5 @@
 # yaml-language-server: $schema=../schema.json
+description: Dev shell with the current directory mounted
 image: myorg/myimage:latest
 volumes:
   - host: "${PWD}"

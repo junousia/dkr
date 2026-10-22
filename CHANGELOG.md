@@ -8,8 +8,13 @@ semver pre-1.0).
 
 ## [Unreleased]
 
+## [0.4.0]
+
 ### Added
 
+- Optional `description` profile field and `dkr --list --json` (name,
+  description, image, error per profile) for scripts and agents.
+- `--help` footer and a README section on using dkr from agents.
 - `$(command)` substitution in `volumes[].host` and `env` values.
 
 ### Changed

@@ -5,7 +5,8 @@ use clap::Parser;
 
 use dkr::cli::Cli;
 use dkr::config::{
-    list_profiles, resolve_config_dir, schema_json, split_profile_arg, validate, with_tag, Profile,
+    list_profiles, profile_summaries, resolve_config_dir, schema_json, split_profile_arg, validate,
+    with_tag, Profile,
 };
 use dkr::docker_cmd;
 
@@ -27,6 +28,14 @@ fn run(cli: Cli) -> Result<ExitCode> {
     }
 
     let config_dir = resolve_config_dir(cli.config_dir.clone());
+
+    if cli.list && cli.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&profile_summaries(&config_dir))?
+        );
+        return Ok(ExitCode::SUCCESS);
+    }
 
     if cli.list {
         let profiles = list_profiles(&config_dir);

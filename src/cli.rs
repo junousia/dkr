@@ -4,11 +4,23 @@ use clap::Parser;
 
 /// Run one-off commands from docker images using named per-image profiles.
 #[derive(Parser, Debug)]
-#[command(name = "dkr", version, about)]
+#[command(
+    name = "dkr",
+    version,
+    about,
+    after_help = "For scripts and AI agents: `dkr --list --json` shows profiles, `dkr --schema` \
+prints the profile format, `dkr <profile> --validate` checks one, and `dkr <profile> --dry-run` \
+shows the docker command without running it."
+)]
 pub struct Cli {
     /// List available profiles and exit.
     #[arg(short, long)]
     pub list: bool,
+
+    /// With --list, print a JSON array of {name, description, image, error}
+    /// instead of bare names (for scripts and agents).
+    #[arg(long, requires = "list")]
+    pub json: bool,
 
     /// Print the docker command that would run, without executing it.
     #[arg(long)]

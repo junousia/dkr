@@ -4,6 +4,14 @@
   "description": "A named dkr profile: settings applied to `docker run` for one image.\nOnly `image` is required.",
   "type": "object",
   "properties": {
+    "description": {
+      "description": "One-line human/agent-readable summary of what this profile is for.\nShown by `dkr --list --json`; has no effect on the docker command.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
     "entrypoint": {
       "description": "Overrides the image's entrypoint (`--entrypoint`).",
       "type": [

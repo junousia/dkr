@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// A bind mount: `host` is mounted into the container at `container`.
@@ -27,6 +27,10 @@ fn default_init() -> bool {
 #[derive(Debug, Deserialize, JsonSchema, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Profile {
+    /// One-line human/agent-readable summary of what this profile is for.
+    /// Shown by `dkr --list --json`; has no effect on the docker command.
+    #[serde(default)]
+    pub description: Option<String>,
     /// The docker image to run, e.g. "myorg/myimage:latest".
     pub image: String,
     /// Bind mounts (`-v host:container[:options]`).
@@ -188,6 +192,38 @@ pub fn list_profiles(config_dir: &Path) -> Vec<String> {
         .collect();
     names.sort();
     names
+}
+
+/// One entry of `dkr --list --json`.
+#[derive(Debug, Serialize)]
+pub struct ProfileSummary {
+    pub name: String,
+    pub description: Option<String>,
+    pub image: Option<String>,
+    /// Set instead of `image`/`description` when the profile fails to parse.
+    pub error: Option<String>,
+}
+
+/// Summarizes every profile in `config_dir` (sorted by name) for machine
+/// consumers; a broken profile is reported in `error` rather than dropped.
+pub fn profile_summaries(config_dir: &Path) -> Vec<ProfileSummary> {
+    list_profiles(config_dir)
+        .into_iter()
+        .map(|name| match Profile::load(config_dir, &name) {
+            Ok(p) => ProfileSummary {
+                name,
+                description: p.description,
+                image: Some(p.image),
+                error: None,
+            },
+            Err(err) => ProfileSummary {
+                name,
+                description: None,
+                image: None,
+                error: Some(format!("{err:#}")),
+            },
+        })
+        .collect()
 }
 
 impl Profile {

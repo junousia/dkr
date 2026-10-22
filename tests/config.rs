@@ -112,3 +112,27 @@ fn with_tag_replaces_a_digest_pin() {
         "myorg/myimage:1.0.0"
     );
 }
+
+#[test]
+fn profile_summaries_report_description_image_and_parse_errors() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    std::fs::write(
+        dir.path().join("a.yaml"),
+        "description: Does a thing\nimage: alpine:3\n",
+    )
+    .unwrap();
+    std::fs::write(dir.path().join("b.yaml"), "image: x\nbogus: 1\n").unwrap();
+
+    let summaries = dkr::config::profile_summaries(dir.path());
+    assert_eq!(summaries.len(), 2);
+    assert_eq!(summaries[0].name, "a");
+    assert_eq!(summaries[0].description.as_deref(), Some("Does a thing"));
+    assert_eq!(summaries[0].image.as_deref(), Some("alpine:3"));
+    assert_eq!(summaries[1].name, "b");
+    assert!(summaries[1].image.is_none());
+    assert!(summaries[1]
+        .error
+        .as_deref()
+        .unwrap()
+        .contains("failed to parse"));
+}
