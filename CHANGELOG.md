@@ -8,6 +8,8 @@ semver pre-1.0).
 
 ## [Unreleased]
 
+## [0.5.2]
+
 ### Changed
 
 - Linux release binaries are now statically linked musl builds, so they no
