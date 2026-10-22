@@ -9,7 +9,7 @@ use thiserror::Error;
 #[derive(Debug, Deserialize, JsonSchema, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Volume {
-    /// Host path to mount. Supports `~` and `$VAR`/`${VAR}` expansion.
+    /// Host path to mount. Supports `~`, `$VAR`/`${VAR}` and `$(command)` expansion.
     pub host: String,
     /// Path inside the container to mount it at.
     pub container: String,
@@ -33,7 +33,7 @@ pub struct Profile {
     #[serde(default)]
     pub volumes: Vec<Volume>,
     /// Environment variables passed into the container (`-e KEY=VALUE`).
-    /// Values support `~` and `$VAR`/`${VAR}` expansion.
+    /// Values support `~`, `$VAR`/`${VAR}` and `$(command)` expansion.
     #[serde(default)]
     pub env: HashMap<String, String>,
     /// Run docker's `--init` so the container's main process isn't PID 1,
@@ -84,10 +84,16 @@ pub fn validate(profile: &Profile) -> Vec<String> {
         if volume.container.trim().is_empty() {
             problems.push(format!("volumes[{i}].container must not be empty"));
         }
+        if let Err(err) = crate::resolve::check_syntax(&volume.host) {
+            problems.push(format!("volumes[{i}].host: {err}"));
+        }
     }
-    for (key, _) in &profile.env {
+    for (key, value) in &profile.env {
         if key.trim().is_empty() {
             problems.push("env has an empty variable name".to_string());
+        }
+        if let Err(err) = crate::resolve::check_syntax(value) {
+            problems.push(format!("env.{key}: {err}"));
         }
     }
     for (i, port) in profile.ports.iter().enumerate() {

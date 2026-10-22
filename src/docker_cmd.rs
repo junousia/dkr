@@ -8,15 +8,10 @@ pub fn is_interactive() -> bool {
     std::io::stdin().is_terminal()
 }
 
-fn expand(value: &str) -> String {
-    shellexpand::full(value)
-        .map(|expanded| expanded.into_owned())
-        .unwrap_or_else(|_| value.to_string())
-}
-
 /// Builds the full `docker run` argv (everything after `docker`) for the
 /// given profile, trailing command, and interactivity. Pure and
-/// side-effect-free so it can be tested without touching docker.
+/// side-effect-free so it can be tested without touching docker. Expects
+/// `~`/`$VAR`/`$(command)` to be resolved already (see `Profile::resolve`).
 pub fn build_args(profile: &Profile, command: &[String], interactive: bool) -> Vec<String> {
     let mut args = vec!["run".to_string(), "--rm".to_string()];
     if profile.init {
@@ -27,7 +22,7 @@ pub fn build_args(profile: &Profile, command: &[String], interactive: bool) -> V
     }
 
     for volume in &profile.volumes {
-        let host = expand(&volume.host);
+        let host = &volume.host;
         let mut spec = format!("{host}:{}", volume.container);
         if let Some(options) = &volume.options {
             spec.push(':');
@@ -40,7 +35,7 @@ pub fn build_args(profile: &Profile, command: &[String], interactive: bool) -> V
     let mut env_keys: Vec<&String> = profile.env.keys().collect();
     env_keys.sort();
     for key in env_keys {
-        let value = expand(&profile.env[key]);
+        let value = &profile.env[key];
         args.push("-e".to_string());
         args.push(format!("{key}={value}"));
     }

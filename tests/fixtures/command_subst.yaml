@@ -1,0 +1,8 @@
+image: myorg/myimage:latest
+volumes:
+  - host: "/data/$(echo abc)"
+    container: /workspace
+env:
+  TOKEN: "$(printf 's3cr$t ~ ${x}')"
+  NESTED: "outer-$(echo $(echo inner))"
+  LITERAL: "$$(not run)"

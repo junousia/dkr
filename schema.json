@@ -13,7 +13,7 @@
       "default": null
     },
     "env": {
-      "description": "Environment variables passed into the container (`-e KEY=VALUE`).\nValues support `~` and `$VAR`/`${VAR}` expansion.",
+      "description": "Environment variables passed into the container (`-e KEY=VALUE`).\nValues support `~`, `$VAR`/`${VAR}` and `$(command)` expansion.",
       "type": "object",
       "additionalProperties": {
         "type": "string"
@@ -91,7 +91,7 @@
           "type": "string"
         },
         "host": {
-          "description": "Host path to mount. Supports `~` and `$VAR`/`${VAR}` expansion.",
+          "description": "Host path to mount. Supports `~`, `$VAR`/`${VAR}` and `$(command)` expansion.",
           "type": "string"
         },
         "options": {

@@ -64,6 +64,13 @@ extra_args:
 Only `image` is required. Host paths and env values are expanded, so `~` and
 `$VAR`/`${VAR}` (including `${PWD}`) work as written above.
 
+They also support command substitution: `$(command)` is run with `sh -c` and
+replaced by its stdout (trailing newlines trimmed), e.g.
+`API_TOKEN: "$(pass show api/token)"`. A failing command aborts the run.
+Output is inserted verbatim, never re-expanded; write `$$(` for a literal
+`$(`. Commands also run for `--dry-run` (so the printed command is the real
+one, secrets included), but never for `--validate`.
+
 Running `dkr myimage` then applies all of that automatically. See
 [`examples/example.yaml`](examples/example.yaml) for a copy-pasteable
 starting point.

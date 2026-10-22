@@ -68,6 +68,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
     }
 
     let interactive = docker_cmd::is_interactive();
+    let profile = profile.resolve()?;
     let args = docker_cmd::build_args(&profile, &cli.command, interactive);
 
     if cli.dry_run {

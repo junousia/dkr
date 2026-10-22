@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use dkr::config::{list_profiles, with_tag, Profile};
+use dkr::config::{list_profiles, validate, with_tag, Profile};
 use dkr::docker_cmd::{build_args, shell_join};
 
 fn fixtures_dir() -> PathBuf {
@@ -102,7 +102,7 @@ fn env_and_volume_values_expand_tilde_and_vars() {
         std::env::set_var("DKR_TEST_NAME", "jukka");
     }
 
-    let profile = load("expand");
+    let profile = load("expand").resolve().unwrap();
     let args = build_args(&profile, &[], false);
 
     assert_eq!(
@@ -123,7 +123,10 @@ fn env_and_volume_values_expand_tilde_and_vars() {
 #[test]
 fn list_profiles_finds_fixture_names_sorted() {
     let names = list_profiles(&fixtures_dir());
-    assert_eq!(names, vec!["expand", "full", "minimal", "no_init"]);
+    assert_eq!(
+        names,
+        vec!["command_subst", "expand", "full", "minimal", "no_init"]
+    );
 }
 
 #[test]
@@ -144,4 +147,44 @@ fn shell_join_quotes_arguments_with_special_characters() {
         "plain".to_string(),
     ];
     assert_eq!(shell_join(&args), "run 'hello world' plain");
+}
+
+#[test]
+fn command_substitution_runs_in_env_and_volume_values() {
+    let profile = load("command_subst").resolve().unwrap();
+    let args = build_args(&profile, &[], false);
+    assert_eq!(
+        args,
+        vec![
+            "run",
+            "--rm",
+            "--init",
+            "-v",
+            "/data/abc:/workspace",
+            "-e",
+            "LITERAL=$(not run)",
+            "-e",
+            "NESTED=outer-inner",
+            "-e",
+            "TOKEN=s3cr$t ~ ${x}",
+            "myorg/myimage:latest",
+        ]
+    );
+}
+
+#[test]
+fn failing_command_substitution_is_an_error() {
+    let mut profile = load("minimal");
+    profile.env.insert("X".into(), "$(exit 3)".into());
+    let err = profile.resolve().unwrap_err().to_string();
+    assert!(err.contains("exit 3"), "{err}");
+}
+
+#[test]
+fn validate_flags_unterminated_substitution_without_running_it() {
+    let mut profile = load("minimal");
+    profile.env.insert("X".into(), "$(echo hi".into());
+    let problems = validate(&profile);
+    assert_eq!(problems.len(), 1);
+    assert!(problems[0].contains("env.X"));
 }

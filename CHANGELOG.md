@@ -8,6 +8,15 @@ semver pre-1.0).
 
 ## [Unreleased]
 
+### Added
+
+- `$(command)` substitution in `volumes[].host` and `env` values.
+
+### Changed
+
+- `docker_cmd::build_args` no longer expands `~`/`$VAR`; call
+  `Profile::resolve()` first.
+
 ## [0.3.0]
 
 ### Added
