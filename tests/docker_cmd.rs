@@ -355,3 +355,30 @@ fn cli_rejects_bad_override_values() {
         assert!(cli.apply_overrides(&mut profile).is_err(), "{bad:?}");
     }
 }
+
+#[test]
+fn unset_variable_is_an_error_not_passed_through() {
+    let mut profile = load("minimal");
+    profile
+        .env
+        .insert("X".into(), "${DKR_TEST_UNSET_VAR}".into());
+    let err = profile.resolve().unwrap_err().to_string();
+    assert!(err.contains("DKR_TEST_UNSET_VAR"), "{err}");
+    let problems = validate(&profile);
+    assert_eq!(problems.len(), 1, "{problems:?}");
+    assert!(problems[0].contains("env.X") && problems[0].contains("DKR_TEST_UNSET_VAR"));
+}
+
+#[test]
+fn dollar_dollar_and_command_defaults_handle_optional_values() {
+    let mut profile = load("minimal");
+    profile.env.insert("A".into(), "pa$$word".into());
+    profile.env.insert(
+        "B".into(),
+        "$(echo \"${DKR_TEST_UNSET_VAR:-fallback}\")".into(),
+    );
+    assert!(validate(&profile).is_empty());
+    let resolved = profile.resolve().unwrap();
+    assert_eq!(resolved.env["A"], "pa$word");
+    assert_eq!(resolved.env["B"], "fallback");
+}

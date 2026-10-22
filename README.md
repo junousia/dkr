@@ -96,6 +96,9 @@ entrypoint, extra_args, …) is expanded, so `~` and `$VAR`/`${VAR}`
 They also support command substitution: `$(command)` is run with `sh -c` and
 replaced by its stdout (trailing newlines trimmed), e.g.
 `API_TOKEN: "$(pass show api/token)"`. A failing command aborts the run.
+An unset `$VAR` is an error (also caught by `--validate`), not passed through
+as literal text; write `$$` for a literal `$`, or use
+`$(echo "${VAR:-default}")` for an optional value.
 Output is inserted verbatim, never re-expanded; write `$$(` for a literal
 `$(`. Commands also run for `--dry-run` (so the printed command is the real
 one, secrets included), but never for `--validate`.

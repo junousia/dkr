@@ -8,6 +8,14 @@ semver pre-1.0).
 
 ## [Unreleased]
 
+## [0.5.3]
+
+### Fixed
+
+- An unset `$VAR`/`${VAR}` in a profile was passed to the container as
+  literal text. It is now an error naming the variable and field (also
+  reported by `--validate`). Write `$$` for a literal `$`.
+
 ## [0.5.2]
 
 ### Changed

@@ -8,6 +8,8 @@ use crate::config::{Profile, Volume};
 pub enum ResolveError {
     #[error("unterminated '$(' in '{0}'")]
     Unterminated(String),
+    #[error("environment variable '{0}' is not set (write $$ for a literal $)")]
+    UnsetVar(String),
     #[error("failed to run '{command}'")]
     Spawn {
         command: String,
@@ -66,10 +68,26 @@ fn split_commands(value: &str) -> Result<Vec<Segment<'_>>, ResolveError> {
     Ok(segments)
 }
 
-/// Checks that every `$(` in `value` is closed, without running anything.
-/// Used by `--validate`.
+/// Checks, without running anything, that every `$(` in `value` is closed
+/// and every `$VAR` outside a command is set. Used by `validate`.
 pub fn check_syntax(value: &str) -> Result<(), ResolveError> {
-    split_commands(value).map(|_| ())
+    for segment in split_commands(value)? {
+        if let Segment::Literal(text) = segment {
+            expand_literal(text, false)?;
+        }
+    }
+    Ok(())
+}
+
+fn expand_literal(text: &str, leading: bool) -> Result<String, ResolveError> {
+    let expanded = if leading {
+        shellexpand::full(text)
+    } else {
+        shellexpand::env(text)
+    };
+    expanded
+        .map(|s| s.into_owned())
+        .map_err(|e| ResolveError::UnsetVar(e.var_name))
 }
 
 fn run_command(command: &str) -> Result<String, ResolveError> {
@@ -100,15 +118,8 @@ pub fn expand(value: &str) -> Result<String, ResolveError> {
     let mut out = String::new();
     for (index, segment) in split_commands(value)?.into_iter().enumerate() {
         match segment {
-            Segment::Literal(text) => {
-                // Only the leading literal can start with a `~` to expand.
-                let expanded = if index == 0 {
-                    shellexpand::full(text).map(|s| s.into_owned())
-                } else {
-                    shellexpand::env(text).map(|s| s.into_owned())
-                };
-                out.push_str(&expanded.unwrap_or_else(|_| text.to_string()));
-            }
+            // Only the leading literal can start with a `~` to expand.
+            Segment::Literal(text) => out.push_str(&expand_literal(text, index == 0)?),
             Segment::Command(command) => out.push_str(&run_command(command)?),
         }
     }
