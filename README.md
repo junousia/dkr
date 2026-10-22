@@ -8,6 +8,8 @@ dkr myimage                       # run the image's default command
 dkr myimage -- bash                # run bash inside the container instead
 dkr myimage -- ./scripts/build.sh   # run a script inside the container
 dkr myimage:1.0.0 -- echo hello      # override the profile's image tag for this run
+dkr --image alpine -- echo hi       # quick mode: no profile file needed
+dkr myimage -e DEBUG=1 -p 9000      # per-run env / mount / port overrides
 dkr --list                         # show available profiles
 dkr myimage --dry-run               # print the docker command without running it
 ```
@@ -61,8 +63,23 @@ extra_args:
   - "--cap-add=SYS_PTRACE" # optional, raw extra docker run flags
 ```
 
-Only `image` is required (`description` is an optional summary). Host paths and env values are expanded, so `~` and
-`$VAR`/`${VAR}` (including `${PWD}`) work as written above.
+Only `image` is required. Other optional fields not shown above:
+
+| Field | Docker flag | Notes |
+| --- | --- | --- |
+| `description` | — | One-line summary shown by `--list --json` |
+| `extends` | — | Inherit from another profile (see below) |
+| `mount_cwd` | `-v $PWD:<path>` | Mounts the directory you run `dkr` from; also sets `workdir` unless given |
+| `env_file` | `--env-file` | List of files |
+| `pull` | `--pull` | `always`, `missing` or `never` |
+| `platform` | `--platform` | e.g. `linux/amd64` |
+| `hostname` | `--hostname` | |
+| `add_hosts` | `--add-host` | List of `host:ip` |
+| `tty` | `-it` | `true`/`false` forces or suppresses it; default is auto-detect |
+
+Every string field (image, volumes, env, workdir, user, network, ports,
+entrypoint, extra_args, …) is expanded, so `~` and `$VAR`/`${VAR}`
+(including `${PWD}`) work as written above.
 
 They also support command substitution: `$(command)` is run with `sh -c` and
 replaced by its stdout (trailing newlines trimmed), e.g.
@@ -74,6 +91,61 @@ one, secrets included), but never for `--validate`.
 Running `dkr myimage` then applies all of that automatically. See
 [`examples/example.yaml`](examples/example.yaml) for a copy-pasteable
 starting point.
+
+### Inheriting from another profile
+
+`extends: <profile>` starts from another profile in the same directory:
+
+```yaml
+# ~/.config/dkr/base.yaml
+image: myorg/base:1
+user: "1000:1000"
+volumes:
+  - { host: "${PWD}", container: /workspace }
+env: { TZ: UTC }
+```
+
+```yaml
+# ~/.config/dkr/rust.yaml
+extends: base
+image: rust:1
+env: { CARGO_HOME: /cache }
+```
+
+Scalars in the child replace the parent's; `env` is merged (child wins);
+`volumes`, `ports`, `extra_args`, `env_file` and `add_hosts` are appended
+after the parent's, except that a child volume replaces a parent volume with
+the same `container` path. Chains and cycle detection are supported. A base
+profile needs an `image` too (or `--list --json` reports it as an error).
+
+### Per-run overrides and quick mode
+
+Flags after the profile name adjust a single run without editing the file:
+
+```bash
+dkr myimage -e DEBUG=1 -e HOME_TOKEN        # KEY=VALUE, or KEY to pass the host value through
+dkr myimage -v ~/data:/data:ro -p 9000:9000  # replaces a profile mount at the same container path
+dkr myimage --mount-cwd /src -w /src/app     # also -u, --network, --entrypoint, --platform, --pull
+dkr myimage -a --cap-add=SYS_PTRACE          # any other raw docker flag, repeatable
+```
+
+Override values are used verbatim (your shell already expanded them).
+
+`--image <image>` runs with no profile file at all; every positional
+argument is then part of the command, and all the flags above still apply:
+
+```bash
+dkr --image alpine:3 --mount-cwd /work -- ls -la
+```
+
+### Shell completions
+
+```bash
+dkr --completions zsh  > ~/.zfunc/_dkr          # also bash, fish, elvish, powershell
+dkr --completions bash > ~/.local/share/bash-completion/completions/dkr
+```
+
+Completions cover flags; profile names are not completed.
 
 ### Overriding the image tag
 
@@ -109,8 +181,9 @@ image: myorg/myimage:latest
 
 `dkr <profile> --validate` checks a profile without running docker: unknown
 fields are rejected at parse time (with a message listing the valid field
-names), and `--validate` additionally checks for common mistakes like empty
-paths or malformed `ports` entries.
+names), and the same sanity checks (empty paths, malformed `ports`, unclosed
+`$(`) run before every normal run, so a bad profile fails with a clear message
+instead of a docker error. `--validate` runs them without running docker.
 
 ## Using dkr from an agent or script
 

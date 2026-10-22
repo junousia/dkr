@@ -1,0 +1,13 @@
+extends: base
+description: Child of base
+image: myorg/child:2
+volumes:
+  - host: /new
+    container: /workspace
+env:
+  B: child
+  C: child
+ports:
+  - "81:81"
+extra_args:
+  - "--child"

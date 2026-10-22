@@ -2,7 +2,7 @@ use std::process::{Command, Stdio};
 
 use thiserror::Error;
 
-use crate::config::Profile;
+use crate::config::{Profile, Volume};
 
 #[derive(Debug, Error)]
 pub enum ResolveError {
@@ -116,16 +116,62 @@ pub fn expand(value: &str) -> Result<String, ResolveError> {
 }
 
 impl Profile {
-    /// Returns a copy with `volumes[].host` and `env` values expanded
-    /// (`~`, `$VAR`, `$(command)`). Runs commands, so it is not pure.
+    /// Returns a copy with every string field expanded (`~`, `$VAR`,
+    /// `$(command)`). Runs commands, so it is not pure. `description` and
+    /// `extends` are left alone.
     pub fn resolve(&self) -> Result<Profile, ResolveError> {
-        let mut resolved = self.clone();
-        for volume in &mut resolved.volumes {
+        let mut p = self.clone();
+        p.image = expand(&p.image)?;
+        for volume in &mut p.volumes {
             volume.host = expand(&volume.host)?;
+            volume.container = expand(&volume.container)?;
+            if let Some(options) = &mut volume.options {
+                *options = expand(options)?;
+            }
         }
-        for value in resolved.env.values_mut() {
+        for value in p.env.values_mut() {
             *value = expand(value)?;
         }
-        Ok(resolved)
+        for field in [
+            &mut p.workdir,
+            &mut p.user,
+            &mut p.network,
+            &mut p.entrypoint,
+            &mut p.platform,
+            &mut p.hostname,
+            &mut p.mount_cwd,
+        ] {
+            if let Some(value) = field {
+                *value = expand(value)?;
+            }
+        }
+        for list in [
+            &mut p.ports,
+            &mut p.extra_args,
+            &mut p.env_file,
+            &mut p.add_hosts,
+        ] {
+            for value in list.iter_mut() {
+                *value = expand(value)?;
+            }
+        }
+        Ok(p)
+    }
+
+    /// Turns `mount_cwd` into a bind mount of the current directory, and
+    /// defaults `workdir` to it. Call after `resolve()` and any overrides.
+    pub fn apply_mount_cwd(&mut self) -> std::io::Result<()> {
+        if let Some(container) = self.mount_cwd.take() {
+            let cwd = std::env::current_dir()?;
+            if self.workdir.is_none() {
+                self.workdir = Some(container.clone());
+            }
+            self.add_volume(Volume {
+                host: cwd.display().to_string(),
+                container,
+                options: None,
+            });
+        }
+        Ok(())
     }
 }

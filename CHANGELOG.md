@@ -8,6 +8,28 @@ semver pre-1.0).
 
 ## [Unreleased]
 
+## [0.5.0]
+
+### Added
+
+- Quick mode: `dkr --image alpine -- echo hi` runs without a profile file.
+- Per-run overrides: `-e`, `-v`, `-p`, `-w`, `-u`, `--network`,
+  `--entrypoint`, `--platform`, `--pull`, `--mount-cwd`, and `-a` for any raw
+  docker flag.
+- `extends: <profile>` profile inheritance.
+- New profile fields: `mount_cwd`, `env_file`, `pull`, `platform`,
+  `hostname`, `add_hosts`, `tty`.
+- `$(command)`, `~` and `$VAR` expansion now applies to every string field,
+  not just volume hosts and env values.
+- `dkr --completions <shell>`.
+
+### Changed
+
+- Profile sanity checks (`validate`) now run before every normal run, not
+  only under `--validate`, and also check `$(` is closed in every field.
+- `ports` validation accepts every docker form (`80`, `ip:host:container`,
+  `80/udp`, ranges) instead of requiring `host:container`.
+
 ## [0.4.0]
 
 ### Added

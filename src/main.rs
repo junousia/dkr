@@ -1,7 +1,7 @@
 use std::process::{Command, ExitCode};
 
 use anyhow::{bail, Context, Result};
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 
 use dkr::cli::Cli;
 use dkr::config::{
@@ -27,6 +27,11 @@ fn run(cli: Cli) -> Result<ExitCode> {
         return Ok(ExitCode::SUCCESS);
     }
 
+    if let Some(shell) = cli.completions {
+        clap_complete::generate(shell, &mut Cli::command(), "dkr", &mut std::io::stdout());
+        return Ok(ExitCode::SUCCESS);
+    }
+
     let config_dir = resolve_config_dir(cli.config_dir.clone());
 
     if cli.list && cli.json {
@@ -49,36 +54,58 @@ fn run(cli: Cli) -> Result<ExitCode> {
         return Ok(ExitCode::SUCCESS);
     }
 
-    let Some(arg) = cli.profile.clone() else {
-        bail!("a profile name is required (or pass --list to see available profiles)");
-    };
-    let (name, tag_override) = split_profile_arg(&arg);
-
-    let mut profile = Profile::load(&config_dir, name)?;
-
-    if let Some(tag) = tag_override {
-        if tag.is_empty() {
-            bail!("empty tag after ':' in '{arg}' - use '<profile>:<tag>'");
+    // In quick mode there is no profile, so the first positional (clap
+    // reads it as the profile name) is really the start of the command.
+    let mut command = cli.command.clone();
+    let (label, mut profile) = match &cli.image {
+        Some(image) => {
+            command.splice(0..0, cli.profile.clone());
+            ("--image".to_string(), Profile::new(image.clone()))
         }
-        profile.image = with_tag(&profile.image, tag);
-    }
+        None => {
+            let Some(arg) = cli.profile.clone() else {
+                bail!("a profile name or --image is required (or pass --list to see available profiles)");
+            };
+            let (name, tag_override) = split_profile_arg(&arg);
+            let mut profile = Profile::load(&config_dir, name)?;
+            if let Some(tag) = tag_override {
+                if tag.is_empty() {
+                    bail!("empty tag after ':' in '{arg}' - use '<profile>:<tag>'");
+                }
+                profile.image = with_tag(&profile.image, tag);
+            }
+            (arg, profile)
+        }
+    };
 
+    let problems = validate(&profile);
     if cli.validate {
-        let problems = validate(&profile);
         if problems.is_empty() {
-            println!("profile '{arg}' is valid (image: {})", profile.image);
+            println!("profile '{label}' is valid (image: {})", profile.image);
             return Ok(ExitCode::SUCCESS);
         }
-        eprintln!("profile '{arg}' has problems:");
+        eprintln!("profile '{label}' has problems:");
         for problem in &problems {
             eprintln!("  - {problem}");
         }
         return Ok(ExitCode::FAILURE);
     }
+    if !problems.is_empty() {
+        bail!(
+            "profile '{label}' is invalid:\n  - {}",
+            problems.join("\n  - ")
+        );
+    }
 
-    let interactive = docker_cmd::is_interactive();
-    let profile = profile.resolve()?;
-    let args = docker_cmd::build_args(&profile, &cli.command, interactive);
+    profile = profile.resolve()?;
+    cli.apply_overrides(&mut profile)
+        .map_err(anyhow::Error::msg)?;
+    profile
+        .apply_mount_cwd()
+        .context("failed to determine the current directory for mount_cwd")?;
+
+    let interactive = profile.tty.unwrap_or_else(docker_cmd::is_interactive);
+    let args = docker_cmd::build_args(&profile, &command, interactive);
 
     if cli.dry_run {
         println!("docker {}", docker_cmd::shell_join(&args));

@@ -21,15 +21,24 @@ retyping `docker run` flags. See `README.md` for the user-facing overview.
 
 ## Architecture
 
-- `src/cli.rs` — the `clap` derive `Cli` struct. Flags only, no subcommands
-  (see Conventions below).
+- `src/cli.rs` — the `clap` derive `Cli` struct (flags only, no subcommands —
+  see Conventions below) plus `Cli::apply_overrides`, which applies the
+  per-run `-e/-v/-p/-w/...` flags to an already-resolved `Profile`.
 - `src/config.rs` — `Profile`/`Volume` structs (`serde` + `schemars`),
-  config directory resolution, `list_profiles`, `schema_json`, `validate`.
-- `src/docker_cmd.rs` — `build_args()`: a pure function, `Profile` + trailing
-  command → docker run argv. This is the main unit-tested surface; no
-  docker execution is needed to test it.
+  config directory resolution, `extends` merging (done on `serde_yaml::Value`
+  before deserializing), `list_profiles`, `profile_summaries`, `schema_json`,
+  `validate`.
+- `src/resolve.rs` — the only impure step: `Profile::resolve()` expands `~`,
+  `$VAR` and `$(command)` in every string field; `apply_mount_cwd()` reads
+  the current directory. Command output is never re-expanded, which is why
+  CLI overrides are applied *after* `resolve()` (they are already shell-expanded).
+- `src/docker_cmd.rs` — `build_args()`: a pure function, resolved `Profile` +
+  trailing command → docker run argv. It does no expansion itself. This is
+  the main unit-tested surface; no docker execution is needed to test it.
 - `src/main.rs` — thin wiring: parse CLI, then branch to `--schema` /
-  `--list` / `--validate` / `--dry-run` / actually exec `docker`.
+  `--completions` / `--list` / `--validate` / `--dry-run` / actually exec
+  `docker`. Order: load (or quick-mode `--image`) → validate → `resolve()` →
+  `apply_overrides` → `apply_mount_cwd` → `build_args`.
 - `src/lib.rs` — re-exports the modules so integration tests under `tests/`
   can use them as `dkr::config::...` etc.
 
@@ -63,7 +72,10 @@ retyping `docker run` flags. See `README.md` for the user-facing overview.
    freshly generated schema against the committed one.
 4. Update `README.md`'s field reference and `examples/example.yaml` if the
    change is user-facing.
-5. Add or update a fixture under `tests/fixtures/` and a case in
+5. If the field holds a string, `resolve()` in `src/resolve.rs` and
+   `validate()` in `src/config.rs` need to cover it; if it is a list or map,
+   decide its `extends` merge rule in `merge_profiles`.
+6. Add or update a fixture under `tests/fixtures/` and a case in
    `tests/docker_cmd.rs` or `tests/config.rs` covering the new behavior.
 
 ## Releasing
@@ -103,8 +115,5 @@ bug fix bumps the patch version.
   argv-building. The `--init` bug above was caught by manual testing, not
   the test suite. A `#[ignore]`-gated test that really shells out to docker
   (GitHub-hosted runners have it preinstalled) would close this.
-- `validate()` only runs when `--validate` is passed; a normal run with a
-  malformed `ports` entry just fails inside docker with a less clear error.
-- No no-profile "quick" mode (e.g. `dkr --image alpine -- echo hi`) for a
-  genuine one-off without a saved profile file first.
-- No shell completions (`clap_complete` would make this cheap).
+- Shell completions cover flags but not profile names (would need
+  `clap_complete`'s unstable dynamic completion).

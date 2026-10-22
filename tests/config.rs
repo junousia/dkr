@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use dkr::config::{schema_json, split_profile_arg, validate, with_tag, Profile};
+use dkr::config::{schema_json, split_profile_arg, valid_port_spec, validate, with_tag, Profile};
 
 fn fixtures_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
@@ -51,6 +51,9 @@ fn validate_reports_every_problem() {
 image: alpine:latest
 ports:
   - "notaport"
+  - "127.0.0.1:8080:80/tcp"
+  - "80"
+  - "8000-8010:8000-8010"
 extra_args:
   - ""
 volumes:
@@ -135,4 +138,30 @@ fn profile_summaries_report_description_image_and_parse_errors() {
         .as_deref()
         .unwrap()
         .contains("failed to parse"));
+}
+
+#[test]
+fn port_specs_accept_docker_forms_and_reject_junk() {
+    for ok in [
+        "80",
+        "8080:80",
+        "127.0.0.1:8080:80",
+        "80/udp",
+        "8000-8010:8000-8010",
+        "$PORT:80",
+    ] {
+        assert!(valid_port_spec(ok), "{ok}");
+    }
+    for bad in ["", "notaport", "80:", "80:x", "80/", "a-b"] {
+        assert!(!valid_port_spec(bad), "{bad}");
+    }
+}
+
+#[test]
+fn validate_checks_substitution_syntax_in_every_string_field() {
+    let mut profile = Profile::new("alpine");
+    profile.extra_args.push("$(echo".into());
+    profile.workdir = Some("$(oops".into());
+    let problems = validate(&profile);
+    assert_eq!(problems.len(), 2, "{problems:?}");
 }

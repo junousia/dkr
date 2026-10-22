@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_yaml::Value;
 use thiserror::Error;
 
 /// A bind mount: `host` is mounted into the container at `container`.
@@ -18,6 +19,29 @@ pub struct Volume {
     pub options: Option<String>,
 }
 
+/// When docker pulls the image (`--pull`).
+#[derive(Debug, Deserialize, JsonSchema, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+#[serde(rename_all = "lowercase")]
+#[value(rename_all = "lowercase")]
+pub enum PullPolicy {
+    /// Always pull before running.
+    Always,
+    /// Pull only if the image is missing locally (docker's default).
+    Missing,
+    /// Never pull; fail if the image is missing locally.
+    Never,
+}
+
+impl PullPolicy {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PullPolicy::Always => "always",
+            PullPolicy::Missing => "missing",
+            PullPolicy::Never => "never",
+        }
+    }
+}
+
 fn default_init() -> bool {
     true
 }
@@ -31,8 +55,40 @@ pub struct Profile {
     /// Shown by `dkr --list --json`; has no effect on the docker command.
     #[serde(default)]
     pub description: Option<String>,
-    /// The docker image to run, e.g. "myorg/myimage:latest".
+    /// Name of another profile in the same directory to inherit from.
+    /// Scalars set here replace the parent's; `env` is merged (this profile
+    /// wins); `volumes`, `ports`, `extra_args`, `env_file` and `add_hosts`
+    /// are appended after the parent's (a volume with the same `container`
+    /// path replaces the parent's). A parent may itself extend another.
+    #[serde(default)]
+    pub extends: Option<String>,
+    /// The docker image to run, e.g. "myorg/myimage:latest". Supports
+    /// `~`, `$VAR`/`${VAR}` and `$(command)` expansion.
     pub image: String,
+    /// Mounts the directory dkr is run from at this container path, and
+    /// uses it as the working directory unless `workdir` is set.
+    #[serde(default)]
+    pub mount_cwd: Option<String>,
+    /// Files of `KEY=VALUE` lines passed into the container (`--env-file`).
+    /// Supports `~`, `$VAR` and `$(command)` expansion.
+    #[serde(default)]
+    pub env_file: Vec<String>,
+    /// When to pull the image (`--pull`): always, missing or never.
+    #[serde(default)]
+    pub pull: Option<PullPolicy>,
+    /// Platform to run the image as, e.g. "linux/amd64" (`--platform`).
+    #[serde(default)]
+    pub platform: Option<String>,
+    /// Container hostname (`--hostname`).
+    #[serde(default)]
+    pub hostname: Option<String>,
+    /// Extra hosts-file entries as "host:ip" strings (`--add-host`).
+    #[serde(default)]
+    pub add_hosts: Vec<String>,
+    /// Force (true) or suppress (false) docker's `-it`. By default it is
+    /// used when stdin is a terminal.
+    #[serde(default)]
+    pub tty: Option<bool>,
     /// Bind mounts (`-v host:container[:options]`).
     #[serde(default)]
     pub volumes: Vec<Volume>,
@@ -45,7 +101,8 @@ pub struct Profile {
     /// Defaults to true; set to false to opt out.
     #[serde(default = "default_init")]
     pub init: bool,
-    /// Working directory inside the container (`-w`).
+    /// Working directory inside the container (`-w`). Supports `$VAR` and
+    /// `$(command)` expansion, like every other string field.
     #[serde(default)]
     pub workdir: Option<String>,
     /// User to run as inside the container, e.g. "1000:1000" (`-u`).
@@ -74,9 +131,46 @@ pub fn schema_json() -> String {
 
 /// Validates a profile beyond what YAML parsing already checks (structural
 /// validity, e.g. rejecting unknown fields). Returns a list of human-readable
-/// problems; empty means valid.
+/// problems; empty means valid. Runs no commands: `$(...)` is only checked
+/// for being closed.
 pub fn validate(profile: &Profile) -> Vec<String> {
     let mut problems = Vec::new();
+    let mut syntax = |field: String, value: &str| {
+        if let Err(err) = crate::resolve::check_syntax(value) {
+            problems.push(format!("{field}: {err}"));
+        }
+    };
+
+    syntax("image".into(), &profile.image);
+    for (i, volume) in profile.volumes.iter().enumerate() {
+        syntax(format!("volumes[{i}].host"), &volume.host);
+    }
+    for (key, value) in &profile.env {
+        syntax(format!("env.{key}"), value);
+    }
+    for (name, value) in [
+        ("workdir", &profile.workdir),
+        ("user", &profile.user),
+        ("network", &profile.network),
+        ("entrypoint", &profile.entrypoint),
+        ("platform", &profile.platform),
+        ("hostname", &profile.hostname),
+        ("mount_cwd", &profile.mount_cwd),
+    ] {
+        if let Some(value) = value {
+            syntax(name.into(), value);
+        }
+    }
+    for (name, list) in [
+        ("ports", &profile.ports),
+        ("extra_args", &profile.extra_args),
+        ("env_file", &profile.env_file),
+        ("add_hosts", &profile.add_hosts),
+    ] {
+        for (i, value) in list.iter().enumerate() {
+            syntax(format!("{name}[{i}]"), value);
+        }
+    }
 
     if profile.image.trim().is_empty() {
         problems.push("image must not be empty".to_string());
@@ -88,22 +182,16 @@ pub fn validate(profile: &Profile) -> Vec<String> {
         if volume.container.trim().is_empty() {
             problems.push(format!("volumes[{i}].container must not be empty"));
         }
-        if let Err(err) = crate::resolve::check_syntax(&volume.host) {
-            problems.push(format!("volumes[{i}].host: {err}"));
-        }
     }
-    for (key, value) in &profile.env {
+    for key in profile.env.keys() {
         if key.trim().is_empty() {
             problems.push("env has an empty variable name".to_string());
         }
-        if let Err(err) = crate::resolve::check_syntax(value) {
-            problems.push(format!("env.{key}: {err}"));
-        }
     }
     for (i, port) in profile.ports.iter().enumerate() {
-        if !port.contains(':') {
+        if !valid_port_spec(port) {
             problems.push(format!(
-                "ports[{i}] '{port}' should look like \"host:container\""
+                "ports[{i}] '{port}' should look like \"[[ip:]host:]container[/proto]\""
             ));
         }
     }
@@ -111,6 +199,25 @@ pub fn validate(profile: &Profile) -> Vec<String> {
         if arg.trim().is_empty() {
             problems.push(format!("extra_args[{i}] must not be empty"));
         }
+    }
+    for (i, file) in profile.env_file.iter().enumerate() {
+        if file.trim().is_empty() {
+            problems.push(format!("env_file[{i}] must not be empty"));
+        }
+    }
+    for (i, host) in profile.add_hosts.iter().enumerate() {
+        if !host.contains(':') && !host.contains('$') {
+            problems.push(format!(
+                "add_hosts[{i}] '{host}' should look like \"host:ip\""
+            ));
+        }
+    }
+    if profile
+        .mount_cwd
+        .as_deref()
+        .is_some_and(|p| p.trim().is_empty())
+    {
+        problems.push("mount_cwd must not be empty".to_string());
     }
 
     problems
@@ -130,6 +237,10 @@ pub enum ConfigError {
         #[source]
         source: std::io::Error,
     },
+    #[error("'extends' cycle: {0}")]
+    ExtendsCycle(String),
+    #[error("{0} must contain a YAML mapping")]
+    NotAMapping(String),
     #[error("failed to parse {path}")]
     Parse {
         path: String,
@@ -226,26 +337,157 @@ pub fn profile_summaries(config_dir: &Path) -> Vec<ProfileSummary> {
         .collect()
 }
 
-impl Profile {
-    pub fn load(config_dir: &Path, name: &str) -> Result<Profile, ConfigError> {
-        let path = config_dir.join(format!("{name}.yaml"));
-        let contents = std::fs::read_to_string(&path).map_err(|source| {
-            if source.kind() == std::io::ErrorKind::NotFound {
-                ConfigError::NotFound {
-                    name: name.to_string(),
-                    dir: config_dir.display().to_string(),
-                    available: list_profiles(config_dir).join(", "),
-                }
-            } else {
-                ConfigError::Io {
-                    path: path.display().to_string(),
-                    source,
-                }
+/// Whether `port` is a plausible docker `-p` spec: `[[ip:]host:]container`
+/// where `container` is `port[-port][/proto]`. Skipped when it contains `$`
+/// (can't know the final value before expansion).
+pub fn valid_port_spec(port: &str) -> bool {
+    if port.contains('$') {
+        return true;
+    }
+    let container = port.rsplit(':').next().unwrap_or(port);
+    let (range, proto) = match container.split_once('/') {
+        Some((range, proto)) => (range, Some(proto)),
+        None => (container, None),
+    };
+    let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    let range_ok = match range.split_once('-') {
+        Some((a, b)) => digits(a) && digits(b),
+        None => digits(range),
+    };
+    range_ok && proto.is_none_or(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_alphabetic()))
+}
+
+fn read_profile_file(config_dir: &Path, name: &str) -> Result<(PathBuf, String), ConfigError> {
+    let path = config_dir.join(format!("{name}.yaml"));
+    let contents = std::fs::read_to_string(&path).map_err(|source| {
+        if source.kind() == std::io::ErrorKind::NotFound {
+            ConfigError::NotFound {
+                name: name.to_string(),
+                dir: config_dir.display().to_string(),
+                available: list_profiles(config_dir).join(", "),
             }
-        })?;
-        serde_yaml::from_str(&contents).map_err(|source| ConfigError::Parse {
-            path: path.display().to_string(),
-            source,
-        })
+        } else {
+            ConfigError::Io {
+                path: path.display().to_string(),
+                source,
+            }
+        }
+    })?;
+    Ok((path, contents))
+}
+
+fn parse_error(path: &Path, source: serde_yaml::Error) -> ConfigError {
+    ConfigError::Parse {
+        path: path.display().to_string(),
+        source,
+    }
+}
+
+const APPENDED_LISTS: [&str; 5] = ["volumes", "ports", "extra_args", "env_file", "add_hosts"];
+
+fn container_of(volume: &Value) -> Option<&str> {
+    volume.get("container").and_then(Value::as_str)
+}
+
+/// Overlays `child` onto `base` per the `extends` rules documented on
+/// [`Profile::extends`].
+fn merge_profiles(base: Value, child: Value) -> Value {
+    let (Value::Mapping(mut merged), Value::Mapping(child)) = (base, child) else {
+        unreachable!("profiles are checked to be mappings before merging");
+    };
+    for (key, value) in child {
+        let name = key.as_str().unwrap_or_default();
+        let combined = match (merged.remove(&key), value) {
+            (Some(Value::Mapping(mut b)), Value::Mapping(c)) if name == "env" => {
+                for (k, v) in c {
+                    b.insert(k, v);
+                }
+                Value::Mapping(b)
+            }
+            (Some(Value::Sequence(mut b)), Value::Sequence(c))
+                if APPENDED_LISTS.contains(&name) =>
+            {
+                if name == "volumes" {
+                    b.retain(|bv| {
+                        container_of(bv)
+                            .is_none_or(|bc| !c.iter().any(|cv| container_of(cv) == Some(bc)))
+                    });
+                }
+                b.extend(c);
+                Value::Sequence(b)
+            }
+            (_, value) => value,
+        };
+        merged.insert(key, combined);
+    }
+    Value::Mapping(merged)
+}
+
+fn load_merged(
+    config_dir: &Path,
+    name: &str,
+    chain: &mut Vec<String>,
+) -> Result<Value, ConfigError> {
+    if chain.iter().any(|seen| seen == name) {
+        chain.push(name.to_string());
+        return Err(ConfigError::ExtendsCycle(chain.join(" -> ")));
+    }
+    chain.push(name.to_string());
+    let (path, contents) = read_profile_file(config_dir, name)?;
+    let value: Value = serde_yaml::from_str(&contents).map_err(|e| parse_error(&path, e))?;
+    if !value.is_mapping() {
+        return Err(ConfigError::NotAMapping(path.display().to_string()));
+    }
+    match value.get("extends").and_then(Value::as_str) {
+        Some(parent) => {
+            let base = load_merged(config_dir, parent, chain)?;
+            Ok(merge_profiles(base, value))
+        }
+        None => Ok(value),
+    }
+}
+
+impl Profile {
+    /// A profile that runs `image` with every setting at its default.
+    pub fn new(image: impl Into<String>) -> Profile {
+        Profile {
+            description: None,
+            extends: None,
+            image: image.into(),
+            mount_cwd: None,
+            env_file: Vec::new(),
+            pull: None,
+            platform: None,
+            hostname: None,
+            add_hosts: Vec::new(),
+            tty: None,
+            volumes: Vec::new(),
+            env: HashMap::new(),
+            init: true,
+            workdir: None,
+            user: None,
+            network: None,
+            ports: Vec::new(),
+            entrypoint: None,
+            extra_args: Vec::new(),
+        }
+    }
+
+    /// Adds a bind mount, replacing any existing one at the same container
+    /// path (docker rejects duplicate mount points).
+    pub fn add_volume(&mut self, volume: Volume) {
+        self.volumes.retain(|v| v.container != volume.container);
+        self.volumes.push(volume);
+    }
+
+    pub fn load(config_dir: &Path, name: &str) -> Result<Profile, ConfigError> {
+        let (path, contents) = read_profile_file(config_dir, name)?;
+        let value: Value = serde_yaml::from_str(&contents).map_err(|e| parse_error(&path, e))?;
+        if value.get("extends").is_some() {
+            let merged = load_merged(config_dir, name, &mut Vec::new())?;
+            return serde_yaml::from_value(merged).map_err(|e| parse_error(&path, e));
+        }
+        // No inheritance: parse the text directly so errors keep line numbers.
+        serde_yaml::from_str(&contents).map_err(|e| parse_error(&path, e))
     }
 }

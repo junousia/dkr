@@ -4,6 +4,14 @@
   "description": "A named dkr profile: settings applied to `docker run` for one image.\nOnly `image` is required.",
   "type": "object",
   "properties": {
+    "add_hosts": {
+      "description": "Extra hosts-file entries as \"host:ip\" strings (`--add-host`).",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string"
+      }
+    },
     "description": {
       "description": "One-line human/agent-readable summary of what this profile is for.\nShown by `dkr --list --json`; has no effect on the docker command.",
       "type": [
@@ -28,6 +36,22 @@
       },
       "default": {}
     },
+    "env_file": {
+      "description": "Files of `KEY=VALUE` lines passed into the container (`--env-file`).\nSupports `~`, `$VAR` and `$(command)` expansion.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string"
+      }
+    },
+    "extends": {
+      "description": "Name of another profile in the same directory to inherit from.\nScalars set here replace the parent's; `env` is merged (this profile\nwins); `volumes`, `ports`, `extra_args`, `env_file` and `add_hosts`\nare appended after the parent's (a volume with the same `container`\npath replaces the parent's). A parent may itself extend another.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
     "extra_args": {
       "description": "Raw extra `docker run` flags, appended verbatim before the image.",
       "type": "array",
@@ -36,8 +60,16 @@
         "type": "string"
       }
     },
+    "hostname": {
+      "description": "Container hostname (`--hostname`).",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
     "image": {
-      "description": "The docker image to run, e.g. \"myorg/myimage:latest\".",
+      "description": "The docker image to run, e.g. \"myorg/myimage:latest\". Supports\n`~`, `$VAR`/`${VAR}` and `$(command)` expansion.",
       "type": "string"
     },
     "init": {
@@ -45,8 +77,24 @@
       "type": "boolean",
       "default": true
     },
+    "mount_cwd": {
+      "description": "Mounts the directory dkr is run from at this container path, and\nuses it as the working directory unless `workdir` is set.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
     "network": {
       "description": "Docker network mode, e.g. \"host\" (`--network`).",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "platform": {
+      "description": "Platform to run the image as, e.g. \"linux/amd64\" (`--platform`).",
       "type": [
         "string",
         "null"
@@ -60,6 +108,25 @@
       "items": {
         "type": "string"
       }
+    },
+    "pull": {
+      "description": "When to pull the image (`--pull`): always, missing or never.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PullPolicy"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "tty": {
+      "description": "Force (true) or suppress (false) docker's `-it`. By default it is\nused when stdin is a terminal.",
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": null
     },
     "user": {
       "description": "User to run as inside the container, e.g. \"1000:1000\" (`-u`).",
@@ -77,7 +144,7 @@
       }
     },
     "workdir": {
-      "description": "Working directory inside the container (`-w`).",
+      "description": "Working directory inside the container (`-w`). Supports `$VAR` and\n`$(command)` expansion, like every other string field.",
       "type": [
         "string",
         "null"
@@ -90,6 +157,26 @@
     "image"
   ],
   "$defs": {
+    "PullPolicy": {
+      "description": "When docker pulls the image (`--pull`).",
+      "oneOf": [
+        {
+          "description": "Always pull before running.",
+          "type": "string",
+          "const": "always"
+        },
+        {
+          "description": "Pull only if the image is missing locally (docker's default).",
+          "type": "string",
+          "const": "missing"
+        },
+        {
+          "description": "Never pull; fail if the image is missing locally.",
+          "type": "string",
+          "const": "never"
+        }
+      ]
+    },
     "Volume": {
       "description": "A bind mount: `host` is mounted into the container at `container`.",
       "type": "object",

@@ -1,6 +1,6 @@
 [package]
 name = "dkr"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 license = "MIT"
 description = "Run one-off commands from docker images using named per-image profiles"
@@ -14,6 +14,7 @@ exclude = [".github/"]
 [dependencies]
 anyhow = "1.0"
 clap = { version = "4.6.1", features = ["derive"] }
+clap_complete = "4.6.11"
 dirs = "5.0"
 is-terminal = "0.4"
 schemars = "1.1.0"

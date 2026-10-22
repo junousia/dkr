@@ -1,0 +1,10 @@
+image: myorg/myimage:latest
+pull: never
+platform: linux/amd64
+hostname: box
+add_hosts:
+  - "db:10.0.0.5"
+env_file:
+  - /etc/app.env
+env:
+  X: "1"

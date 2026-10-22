@@ -1,0 +1,15 @@
+description: Shared base
+image: myorg/base:1
+volumes:
+  - host: /cache
+    container: /cache
+  - host: /old
+    container: /workspace
+env:
+  A: base
+  B: base
+ports:
+  - "80:80"
+extra_args:
+  - "--base"
+user: "1000:1000"

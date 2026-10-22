@@ -125,7 +125,16 @@ fn list_profiles_finds_fixture_names_sorted() {
     let names = list_profiles(&fixtures_dir());
     assert_eq!(
         names,
-        vec!["command_subst", "expand", "full", "minimal", "no_init"]
+        vec![
+            "base",
+            "child",
+            "command_subst",
+            "expand",
+            "extras",
+            "full",
+            "minimal",
+            "no_init"
+        ]
     );
 }
 
@@ -187,4 +196,162 @@ fn validate_flags_unterminated_substitution_without_running_it() {
     let problems = validate(&profile);
     assert_eq!(problems.len(), 1);
     assert!(problems[0].contains("env.X"));
+}
+
+#[test]
+fn new_first_class_fields_map_to_docker_flags() {
+    let args = build_args(&load("extras"), &[], false);
+    assert_eq!(
+        args,
+        vec![
+            "run",
+            "--rm",
+            "--init",
+            "--pull",
+            "never",
+            "--platform",
+            "linux/amd64",
+            "--hostname",
+            "box",
+            "--add-host",
+            "db:10.0.0.5",
+            "--env-file",
+            "/etc/app.env",
+            "-e",
+            "X=1",
+            "myorg/myimage:latest",
+        ]
+    );
+}
+
+#[test]
+fn extends_merges_parent_and_child() {
+    let profile = load("child");
+    assert_eq!(profile.image, "myorg/child:2");
+    assert_eq!(profile.description.as_deref(), Some("Child of base"));
+    assert_eq!(profile.user.as_deref(), Some("1000:1000"));
+    let args = build_args(&profile, &[], false);
+    assert_eq!(
+        args,
+        vec![
+            "run",
+            "--rm",
+            "--init",
+            "-v",
+            "/cache:/cache",
+            "-v",
+            "/new:/workspace",
+            "-e",
+            "A=base",
+            "-e",
+            "B=child",
+            "-e",
+            "C=child",
+            "-u",
+            "1000:1000",
+            "-p",
+            "80:80",
+            "-p",
+            "81:81",
+            "--base",
+            "--child",
+            "myorg/child:2",
+        ]
+    );
+}
+
+#[test]
+fn extends_cycle_is_an_error() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("a.yaml"), "extends: b\nimage: x\n").unwrap();
+    std::fs::write(dir.path().join("b.yaml"), "extends: a\nimage: x\n").unwrap();
+    let err = Profile::load(dir.path(), "a").unwrap_err().to_string();
+    assert!(err.contains("a -> b -> a"), "{err}");
+}
+
+#[test]
+fn extends_missing_parent_is_an_error() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("a.yaml"), "extends: nope\nimage: x\n").unwrap();
+    let err = Profile::load(dir.path(), "a").unwrap_err().to_string();
+    assert!(err.contains("nope"), "{err}");
+}
+
+#[test]
+fn command_substitution_covers_extra_args_and_other_fields() {
+    let mut profile = load("minimal");
+    profile.extra_args.push("--label=host=$(echo box)".into());
+    profile.user = Some("$(echo 7):7".into());
+    let args = build_args(&profile.resolve().unwrap(), &[], false);
+    assert!(args.contains(&"--label=host=box".to_string()));
+    assert!(args.contains(&"7:7".to_string()));
+}
+
+#[test]
+fn mount_cwd_mounts_current_dir_and_defaults_workdir() {
+    let mut profile = load("minimal");
+    profile.mount_cwd = Some("/src".into());
+    profile.apply_mount_cwd().unwrap();
+    let cwd = std::env::current_dir().unwrap().display().to_string();
+    let args = build_args(&profile, &[], false);
+    assert_eq!(
+        args,
+        vec![
+            "run".to_string(),
+            "--rm".into(),
+            "--init".into(),
+            "-v".into(),
+            format!("{cwd}:/src"),
+            "-w".into(),
+            "/src".into(),
+            "myorg/myimage:latest".into(),
+        ]
+    );
+}
+
+#[test]
+fn cli_overrides_apply_on_top_of_a_profile() {
+    use clap::Parser;
+    let cli = dkr::cli::Cli::parse_from([
+        "dkr",
+        "full",
+        "-e",
+        "FOO=cli",
+        "-e",
+        "NEW=1",
+        "-v",
+        "/x:/cache:rw",
+        "-p",
+        "9000",
+        "-w",
+        "/tmp",
+        "--pull",
+        "always",
+        "-a",
+        "--privileged",
+        "--",
+        "ls",
+    ]);
+    assert_eq!(cli.command, vec!["ls"]);
+    let mut profile = load("full");
+    cli.apply_overrides(&mut profile).unwrap();
+    let args = build_args(&profile, &cli.command, false);
+    assert!(args.windows(2).any(|w| w == ["-e", "FOO=cli"]));
+    assert!(args.windows(2).any(|w| w == ["-e", "NEW=1"]));
+    assert!(args.windows(2).any(|w| w == ["-v", "/x:/cache:rw"]));
+    assert!(!args.iter().any(|a| a == "/home/jukka/cache:/cache:ro"));
+    assert!(args.windows(2).any(|w| w == ["-p", "9000"]));
+    assert!(args.windows(2).any(|w| w == ["-w", "/tmp"]));
+    assert!(args.windows(2).any(|w| w == ["--pull", "always"]));
+    assert_eq!(args.iter().filter(|a| *a == "--privileged").count(), 1);
+}
+
+#[test]
+fn cli_rejects_bad_override_values() {
+    use clap::Parser;
+    let mut profile = load("minimal");
+    for bad in [["-p", "nope"], ["-v", "justone"], ["-e", "=x"]] {
+        let cli = dkr::cli::Cli::parse_from(["dkr", "minimal", bad[0], bad[1]]);
+        assert!(cli.apply_overrides(&mut profile).is_err(), "{bad:?}");
+    }
 }

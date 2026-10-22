@@ -21,6 +21,23 @@ pub fn build_args(profile: &Profile, command: &[String], interactive: bool) -> V
         args.push("-it".to_string());
     }
 
+    if let Some(pull) = profile.pull {
+        args.push("--pull".to_string());
+        args.push(pull.as_str().to_string());
+    }
+    if let Some(platform) = &profile.platform {
+        args.push("--platform".to_string());
+        args.push(platform.clone());
+    }
+    if let Some(hostname) = &profile.hostname {
+        args.push("--hostname".to_string());
+        args.push(hostname.clone());
+    }
+    for host in &profile.add_hosts {
+        args.push("--add-host".to_string());
+        args.push(host.clone());
+    }
+
     for volume in &profile.volumes {
         let host = &volume.host;
         let mut spec = format!("{host}:{}", volume.container);
@@ -30,6 +47,11 @@ pub fn build_args(profile: &Profile, command: &[String], interactive: bool) -> V
         }
         args.push("-v".to_string());
         args.push(spec);
+    }
+
+    for file in &profile.env_file {
+        args.push("--env-file".to_string());
+        args.push(file.clone());
     }
 
     let mut env_keys: Vec<&String> = profile.env.keys().collect();

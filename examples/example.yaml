@@ -11,3 +11,14 @@ user: "1000:1000"
 entrypoint: /bin/bash
 extra_args:
   - "--cap-add=SYS_PTRACE"
+# Optional extras:
+# extends: base                 # inherit another profile
+# mount_cwd: /workspace         # mount the directory dkr is run from
+# env_file: [~/.config/app.env]
+# pull: missing
+# platform: linux/amd64
+# hostname: dev
+# add_hosts: ["db:10.0.0.5"]
+# tty: true
+# Any string value can use $(command), e.g.:
+#   env: { API_TOKEN: "$(pass show api/token)" }
