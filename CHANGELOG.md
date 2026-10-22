@@ -8,6 +8,11 @@ semver pre-1.0).
 
 ## [Unreleased]
 
+### Changed
+
+- Linux release binaries are now statically linked musl builds, so they no
+  longer require a recent glibc (previously glibc 2.39).
+
 ## [0.5.1]
 
 ### Added

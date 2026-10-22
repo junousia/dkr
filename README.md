@@ -22,7 +22,9 @@ that.
 
 ## Install
 
-Prebuilt binary (Linux/macOS, x86_64/arm64) into `~/.local/bin`:
+Prebuilt binary (Linux/macOS, x86_64/arm64) into `~/.local/bin`. Linux
+binaries are static (musl), so they run on any distro regardless of glibc
+version:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/junousia/dkr/main/install.sh | sh
