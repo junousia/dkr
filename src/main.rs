@@ -9,6 +9,7 @@ use dkr::config::{
     with_tag, Profile,
 };
 use dkr::docker_cmd;
+use dkr::manage;
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
@@ -52,6 +53,21 @@ fn run(cli: Cli) -> Result<ExitCode> {
             }
         }
         return Ok(ExitCode::SUCCESS);
+    }
+
+    if cli.ps {
+        return manage::ps();
+    }
+    if cli.stop || cli.logs {
+        let Some(profile) = cli.profile.as_deref() else {
+            bail!("--stop and --logs need a profile name");
+        };
+        let profile = split_profile_arg(profile).0;
+        return if cli.stop {
+            manage::stop(profile)
+        } else {
+            manage::logs(profile, cli.follow)
+        };
     }
 
     // In quick mode there is no profile, so the first positional (clap
@@ -104,12 +120,49 @@ fn run(cli: Cli) -> Result<ExitCode> {
         .apply_mount_cwd()
         .context("failed to determine the current directory for mount_cwd")?;
 
+    let profile_name = match &cli.image {
+        Some(_) => None,
+        None => cli.profile.as_deref().map(|arg| split_profile_arg(arg).0),
+    };
+    docker_cmd::apply_detach_defaults(&mut profile, profile_name).map_err(anyhow::Error::msg)?;
+
+    let build_args = if cli.no_build {
+        None
+    } else {
+        docker_cmd::build_image_args(&profile)
+    };
     let interactive = profile.tty.unwrap_or_else(docker_cmd::is_interactive);
     let args = docker_cmd::build_args(&profile, &command, interactive);
 
     if cli.dry_run {
+        if let Some(build_args) = &build_args {
+            println!("docker {}", docker_cmd::shell_join(build_args));
+        }
         println!("docker {}", docker_cmd::shell_join(&args));
         return Ok(ExitCode::SUCCESS);
+    }
+
+    if let Some(build_args) = &build_args {
+        let status = Command::new("docker")
+            .args(build_args)
+            .status()
+            .context("failed to execute 'docker' - is it installed and on PATH?")?;
+        if !status.success() {
+            bail!("docker build failed ({status})");
+        }
+    }
+
+    if profile.detach {
+        let name = profile.name.clone().expect("set by apply_detach_defaults");
+        if manage::container_exists(&name)? {
+            if !cli.replace {
+                bail!(
+                    "container '{name}' already exists; pass --replace to recreate it{}",
+                    profile_name.map_or(String::new(), |p| format!(" or run: dkr {p} --stop"))
+                );
+            }
+            manage::stop_and_remove(&[name])?;
+        }
     }
 
     let status = Command::new("docker")

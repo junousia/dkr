@@ -103,6 +103,44 @@ pub struct Cli {
     #[arg(long, value_name = "SHELL")]
     pub completions: Option<Shell>,
 
+    /// Run in the background as a named, labelled container (`docker run
+    /// -d`), overriding the profile's `detach`.
+    #[arg(short = 'd', long, conflicts_with = "no_detach")]
+    pub detach: bool,
+
+    /// Run in the foreground even if the profile sets `detach: true`.
+    #[arg(long)]
+    pub no_detach: bool,
+
+    /// Override the container name (`--name`).
+    #[arg(long)]
+    pub name: Option<String>,
+
+    /// For a detached run: stop and remove an existing container of the
+    /// same name first, instead of refusing to start.
+    #[arg(long)]
+    pub replace: bool,
+
+    /// Skip the profile's `build:` step and run the image as it is.
+    #[arg(long)]
+    pub no_build: bool,
+
+    /// List every container dkr has started in the background and exit.
+    #[arg(long)]
+    pub ps: bool,
+
+    /// Stop and remove the given profile's background containers and exit.
+    #[arg(long)]
+    pub stop: bool,
+
+    /// Print the logs of the given profile's background container and exit.
+    #[arg(long)]
+    pub logs: bool,
+
+    /// With --logs, keep streaming new output.
+    #[arg(short = 'f', long)]
+    pub follow: bool,
+
     /// Directory containing profile YAML files (overrides $DKR_CONFIG_DIR and ~/.config/dkr).
     #[arg(long)]
     pub config_dir: Option<PathBuf>,
@@ -182,6 +220,15 @@ impl Cli {
         }
         if let Some(v) = &self.platform {
             profile.platform = Some(v.clone());
+        }
+        if self.detach {
+            profile.detach = true;
+        }
+        if self.no_detach {
+            profile.detach = false;
+        }
+        if let Some(v) = &self.name {
+            profile.name = Some(v.clone());
         }
         if let Some(v) = self.pull {
             profile.pull = Some(v);

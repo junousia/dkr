@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use dkr::config::{list_profiles, validate, with_tag, Profile};
-use dkr::docker_cmd::{build_args, shell_join};
+use dkr::docker_cmd::{apply_detach_defaults, build_args, build_image_args, shell_join};
 
 fn fixtures_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
@@ -127,13 +127,16 @@ fn list_profiles_finds_fixture_names_sorted() {
         names,
         vec![
             "base",
+            "built",
+            "built_child",
             "child",
             "command_subst",
             "expand",
             "extras",
             "full",
             "minimal",
-            "no_init"
+            "no_init",
+            "service"
         ]
     );
 }
@@ -381,4 +384,149 @@ fn dollar_dollar_and_command_defaults_handle_optional_values() {
     let resolved = profile.resolve().unwrap();
     assert_eq!(resolved.env["A"], "pa$word");
     assert_eq!(resolved.env["B"], "fallback");
+}
+
+#[test]
+fn build_section_produces_a_docker_build_command() {
+    let args = build_image_args(&load("built")).unwrap();
+    assert_eq!(
+        args,
+        vec![
+            "build",
+            "-t",
+            "myapp:dev",
+            "-f",
+            "Dockerfile.dev",
+            "--target",
+            "dev",
+            "--platform",
+            "linux/amd64",
+            "--build-arg",
+            "A_FIRST=x",
+            "--build-arg",
+            "VERSION=1.2.3",
+            "./app",
+        ]
+    );
+    assert!(build_image_args(&load("minimal")).is_none());
+}
+
+#[test]
+fn build_context_defaults_to_current_dir() {
+    let mut profile = Profile::new("x:1");
+    profile.build = Some(dkr::config::Build {
+        context: None,
+        dockerfile: None,
+        target: None,
+        args: Default::default(),
+    });
+    assert_eq!(
+        build_image_args(&profile).unwrap(),
+        vec!["build", "-t", "x:1", "."]
+    );
+}
+
+#[test]
+fn extends_merges_build_keys_and_args() {
+    let args = build_image_args(&load("built_child")).unwrap();
+    assert!(args.windows(2).any(|w| w == ["--target", "prod"]));
+    assert!(args.windows(2).any(|w| w == ["-f", "Dockerfile.dev"]));
+    assert!(args
+        .windows(2)
+        .any(|w| w == ["--build-arg", "VERSION=2.0.0"]));
+    assert!(args.windows(2).any(|w| w == ["--build-arg", "A_FIRST=x"]));
+    assert!(args.windows(2).any(|w| w == ["--build-arg", "EXTRA=y"]));
+    assert_eq!(args.last().unwrap(), "./app");
+}
+
+#[test]
+fn build_fields_support_command_substitution() {
+    let mut profile = load("built");
+    profile
+        .build
+        .as_mut()
+        .unwrap()
+        .args
+        .insert("REV".into(), "$(echo abc)".into());
+    let resolved = profile.resolve().unwrap();
+    let args = build_image_args(&resolved).unwrap();
+    assert!(args.windows(2).any(|w| w == ["--build-arg", "REV=abc"]));
+}
+
+#[test]
+fn detached_profile_gets_name_label_and_no_it() {
+    let mut profile = load("minimal");
+    profile.detach = true;
+    apply_detach_defaults(&mut profile, Some("db")).unwrap();
+    let args = build_args(&profile, &[], true);
+    assert_eq!(
+        args,
+        vec![
+            "run",
+            "-d",
+            "--rm",
+            "--name",
+            "dkr-db",
+            "--init",
+            "--label=dkr.profile=db",
+            "myorg/myimage:latest",
+        ]
+    );
+}
+
+#[test]
+fn restart_policy_replaces_rm() {
+    let mut profile = load("service");
+    apply_detach_defaults(&mut profile, Some("pg")).unwrap();
+    let args = build_args(&profile, &[], false);
+    assert!(!args.contains(&"--rm".to_string()));
+    assert!(args
+        .windows(2)
+        .any(|w| w == ["--restart", "unless-stopped"]));
+    assert!(args.windows(2).any(|w| w == ["--name", "dkr-pg"]));
+}
+
+#[test]
+fn detached_quick_mode_needs_a_name() {
+    let mut profile = Profile::new("alpine");
+    profile.detach = true;
+    assert!(apply_detach_defaults(&mut profile, None).is_err());
+    profile.name = Some("mybox".into());
+    apply_detach_defaults(&mut profile, None).unwrap();
+    assert!(profile
+        .extra_args
+        .contains(&"--label=dkr.profile=mybox".to_string()));
+}
+
+#[test]
+fn foreground_profile_is_untouched_by_detach_defaults() {
+    let mut profile = load("minimal");
+    apply_detach_defaults(&mut profile, Some("x")).unwrap();
+    assert_eq!(
+        build_args(&profile, &[], false),
+        vec!["run", "--rm", "--init", "myorg/myimage:latest"]
+    );
+}
+
+#[test]
+fn validate_flags_restart_without_detach_and_bad_names() {
+    let mut profile = Profile::new("x");
+    profile.restart = Some("always".into());
+    profile.name = Some("-bad name".into());
+    let problems = dkr::config::validate(&profile);
+    assert_eq!(problems.len(), 2, "{problems:?}");
+    profile.detach = true;
+    profile.name = Some("good.name_1".into());
+    profile.restart = Some("on-failure:3".into());
+    assert!(dkr::config::validate(&profile).is_empty());
+    profile.restart = Some("sometimes".into());
+    assert_eq!(dkr::config::validate(&profile).len(), 1);
+}
+
+#[test]
+fn manage_argv_filters_on_the_dkr_label() {
+    use dkr::manage::{find_by_name_args, find_by_profile_args, ps_args};
+    assert!(ps_args().contains(&"--filter=label=dkr.profile".to_string()));
+    assert!(find_by_profile_args("db").contains(&"--filter=label=dkr.profile=db".to_string()));
+    assert!(find_by_name_args("x").contains(&"--filter=name=^/x$".to_string()));
 }

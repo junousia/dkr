@@ -5,7 +5,7 @@ ARGS ?=
 
 .DEFAULT_GOAL := help
 
-.PHONY: help check ci lint fmt-check fmt format test schema schema-check build package publish-dry-run publish clean run
+.PHONY: help check ci lint fmt-check fmt format test test-docker schema schema-check build package publish-dry-run publish clean run
 
 help: ## Show available developer commands.
 	@printf '\033[1mdkr developer commands\033[0m\n'
@@ -20,7 +20,8 @@ help: ## Show available developer commands.
 	@printf '  \033[36mfmt\033[0m         Apply Rust formatting\n'
 	@printf '  \033[36mformat\033[0m      Alias for fmt\n\n'
 	@printf '\033[1mTests\033[0m\n'
-	@printf '  \033[36mtest\033[0m        Run all tests\n\n'
+	@printf '  \033[36mtest\033[0m        Run all tests\n'
+	@printf '  \033[36mtest-docker\033[0m Run docker integration tests (needs docker)\n\n'
 	@printf '\033[1mSchema\033[0m\n'
 	@printf '  \033[36mschema\033[0m       Regenerate schema.json from the Profile struct\n'
 	@printf '  \033[36mschema-check\033[0m Fail if schema.json is out of date\n\n'
@@ -52,6 +53,9 @@ format: fmt ## Alias for fmt.
 
 test: ## Run all tests.
 	$(CARGO) test $(ARGS)
+
+test-docker: ## Run the docker integration tests (needs a docker daemon).
+	$(CARGO) test --test docker_integration -- --ignored --test-threads=1
 
 schema: ## Regenerate schema.json from the Profile struct.
 	$(CARGO) run --quiet -- --schema > schema.json

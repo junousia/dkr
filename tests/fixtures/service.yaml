@@ -1,0 +1,5 @@
+image: postgres:16
+detach: true
+restart: unless-stopped
+env:
+  POSTGRES_PASSWORD: secret

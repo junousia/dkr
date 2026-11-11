@@ -14,11 +14,13 @@ dkr --list                         # show available profiles
 dkr myimage --dry-run               # print the docker command without running it
 ```
 
-`dkr` always runs containers with `--rm` (ephemeral, one-off) and `--init`
+`dkr` runs containers with `--rm` (ephemeral, one-off) and `--init`
 (so the containerized command isn't PID 1 and gets normal signal handling —
 Ctrl-C actually works), and adds `-it` automatically when stdin is a
-terminal. It is not for long-running services — see `docker compose` for
-that.
+terminal. A profile can also build its image from a Dockerfile
+([below](#building-the-image)) or run as a named background container
+([below](#background-containers)). It is not an orchestrator: for
+multi-container stacks use `docker compose`.
 
 ## Install
 
@@ -87,6 +89,10 @@ Only `image` is required. Other optional fields not shown above:
 | `platform` | `--platform` | e.g. `linux/amd64` |
 | `hostname` | `--hostname` | |
 | `add_hosts` | `--add-host` | List of `host:ip` |
+| `build` | `docker build` | Build the image first, see below |
+| `detach` | `-d` | Run in the background, see below |
+| `name` | `--name` | Container name; defaults to `dkr-<profile>` when detached |
+| `restart` | `--restart` | Needs `detach: true`; dkr then drops `--rm` |
 | `tty` | `-it` | `true`/`false` forces or suppresses it; default is auto-detect |
 
 Every string field (image, volumes, env, workdir, user, network, ports,
@@ -152,6 +158,48 @@ argument is then part of the command, and all the flags above still apply:
 ```bash
 dkr --image alpine:3 --mount-cwd /work -- ls -la
 ```
+
+### Building the image
+
+A profile with `build:` runs `docker build` before every run (docker's layer
+cache keeps unchanged builds fast); `image` is the tag the build produces:
+
+```yaml
+image: myapp:dev
+build:
+  context: .                 # default "."
+  dockerfile: Dockerfile.dev # optional
+  target: dev                # optional
+  args:
+    GIT_REV: "$(git rev-parse --short HEAD)"
+```
+
+`--no-build` skips the build and runs the existing image. `--dry-run` prints
+both the `docker build` and the `docker run` command. With `extends`, `build`
+is merged key by key (including `args`).
+
+### Background containers
+
+```yaml
+image: postgres:16
+detach: true
+restart: unless-stopped      # optional
+env:
+  POSTGRES_PASSWORD: "$(pass show db/password)"
+```
+
+```bash
+dkr db                # starts container "dkr-db" with `docker run -d`
+dkr db --logs -f      # follow its logs
+dkr --ps              # every container dkr started, with status
+dkr db --stop         # stop and remove it
+dkr db --replace      # recreate it (otherwise dkr refuses if the name is taken)
+```
+
+`-d` / `--no-detach` flip `detach` for one run, and `--name` overrides the
+name. Quick mode works too, but needs a name: `dkr -d --name web --image
+nginx -p 8080:80`. Containers are found by a `dkr.profile` label, so
+`--ps`, `--stop` and `--logs` keep working whatever they are named.
 
 ### Shell completions
 

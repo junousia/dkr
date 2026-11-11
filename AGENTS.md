@@ -7,6 +7,10 @@ retyping `docker run` flags. See `README.md` for the user-facing overview.
 
 ## Build, test, verify
 
+- `make test-docker` runs `tests/docker_integration.rs` (`#[ignore]`d) against
+  a real docker daemon: quick mode, build, and the detached lifecycle
+  including the `--init`/SIGINT check. CI runs it after `make check`; run it
+  locally when touching `docker_cmd.rs`, `manage.rs` or process spawning.
 - `make check` is the one gate to run before committing or reporting work
   done. It runs `cargo fmt --check`, `cargo check`, `cargo test`, and
   `make schema-check`.
@@ -35,10 +39,15 @@ retyping `docker run` flags. See `README.md` for the user-facing overview.
 - `src/docker_cmd.rs` — `build_args()`: a pure function, resolved `Profile` +
   trailing command → docker run argv. It does no expansion itself. This is
   the main unit-tested surface; no docker execution is needed to test it.
+- `src/manage.rs` — the docker calls behind `--ps` / `--stop` / `--logs` and
+  the "name already taken" check for detached runs (argv builders are pure
+  and unit-tested; the rest shells out). Containers are found by the
+  `dkr.profile` label that `docker_cmd::apply_detach_defaults` adds.
 - `src/main.rs` — thin wiring: parse CLI, then branch to `--schema` /
   `--completions` / `--list` / `--validate` / `--dry-run` / actually exec
   `docker`. Order: load (or quick-mode `--image`) → validate → `resolve()` →
-  `apply_overrides` → `apply_mount_cwd` → `build_args`.
+  `apply_overrides` → `apply_mount_cwd` → `apply_detach_defaults` →
+  `build_image_args` (if `build:`) → `build_args` → name check (detached) → run.
 - `src/lib.rs` — re-exports the modules so integration tests under `tests/`
   can use them as `dkr::config::...` etc.
 
@@ -111,9 +120,8 @@ bug fix bumps the patch version.
 
 ## Known gaps (candidates for future work, not yet done)
 
-- No docker-integration test runs in CI — everything is tested as pure
-  argv-building. The `--init` bug above was caught by manual testing, not
-  the test suite. A `#[ignore]`-gated test that really shells out to docker
-  (GitHub-hosted runners have it preinstalled) would close this.
+- The docker integration tests cover quick mode, build and the detached
+  lifecycle, but not interactive (`-it`) behavior or Ctrl-C on a foreground
+  run, which need a pty.
 - Shell completions cover flags but not profile names (would need
   `clap_complete`'s unstable dynamic completion).

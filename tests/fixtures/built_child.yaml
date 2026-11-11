@@ -1,0 +1,6 @@
+extends: built
+build:
+  target: prod
+  args:
+    VERSION: "2.0.0"
+    EXTRA: "y"

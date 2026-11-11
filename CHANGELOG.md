@@ -8,6 +8,16 @@ semver pre-1.0).
 
 ## [Unreleased]
 
+### Added
+
+- `build:` profile section: runs `docker build` (context, dockerfile,
+  target, args) before every run; `--no-build` skips it.
+- Background containers: `detach`, `name` and `restart` profile fields,
+  `-d`/`--no-detach`/`--name`/`--replace` flags, and `dkr --ps`,
+  `dkr <profile> --stop`, `dkr <profile> --logs [-f]` to manage them
+  (found via a `dkr.profile` label).
+- Docker integration tests (`make test-docker`), run in CI.
+
 ## [0.5.3]
 
 ### Fixed

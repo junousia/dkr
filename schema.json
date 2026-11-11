@@ -12,6 +12,17 @@
         "type": "string"
       }
     },
+    "build": {
+      "description": "Build the image from a Dockerfile before every run (docker's layer\ncache keeps this cheap). `image` is the tag the build produces.\nSkip with `--no-build`.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Build"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "description": {
       "description": "One-line human/agent-readable summary of what this profile is for.\nShown by `dkr --list --json`; has no effect on the docker command.",
       "type": [
@@ -19,6 +30,11 @@
         "null"
       ],
       "default": null
+    },
+    "detach": {
+      "description": "Run in the background (`docker run -d`) as a named, labelled\ncontainer instead of a one-off foreground command. Manage it with\n`dkr <profile> --stop`, `--logs` and `dkr --ps`.",
+      "type": "boolean",
+      "default": false
     },
     "entrypoint": {
       "description": "Overrides the image's entrypoint (`--entrypoint`).",
@@ -45,7 +61,7 @@
       }
     },
     "extends": {
-      "description": "Name of another profile in the same directory to inherit from.\nScalars set here replace the parent's; `env` is merged (this profile\nwins); `volumes`, `ports`, `extra_args`, `env_file` and `add_hosts`\nare appended after the parent's (a volume with the same `container`\npath replaces the parent's). A parent may itself extend another.",
+      "description": "Name of another profile in the same directory to inherit from.\nScalars set here replace the parent's; `env` is merged (this profile\nwins); `build` is merged key by key (including `args`); `volumes`,\n`ports`, `extra_args`, `env_file` and `add_hosts` are appended after\nthe parent's (a volume with the same `container` path replaces the\nparent's). A parent may itself extend another.",
       "type": [
         "string",
         "null"
@@ -79,6 +95,14 @@
     },
     "mount_cwd": {
       "description": "Mounts the directory dkr is run from at this container path, and\nuses it as the working directory unless `workdir` is set.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "name": {
+      "description": "Container name (`--name`). For a detached profile it defaults to\n`dkr-<profile>`.",
       "type": [
         "string",
         "null"
@@ -120,6 +144,14 @@
         }
       ]
     },
+    "restart": {
+      "description": "Restart policy (`--restart`): no, always, unless-stopped or\non-failure[:max]. Requires `detach: true`; dkr then omits `--rm`\nbecause docker forbids combining them.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
     "tty": {
       "description": "Force (true) or suppress (false) docker's `-it`. By default it is\nused when stdin is a terminal.",
       "type": [
@@ -157,6 +189,45 @@
     "image"
   ],
   "$defs": {
+    "Build": {
+      "description": "Builds the image from a Dockerfile (`docker build`) before every run.\nThe profile's `image` is used as the tag the build produces.",
+      "type": "object",
+      "properties": {
+        "args": {
+          "description": "Build arguments (`--build-arg KEY=VALUE`). Values support `~`,\n`$VAR` and `$(command)` expansion.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        },
+        "context": {
+          "description": "Build context directory. Defaults to \".\" (where dkr is run from).\nSupports `~`, `$VAR` and `$(command)` expansion.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "dockerfile": {
+          "description": "Dockerfile path (`-f`), relative to where dkr is run from. Defaults\nto `Dockerfile` inside the context.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "target": {
+          "description": "Multi-stage build target (`--target`).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
     "PullPolicy": {
       "description": "When docker pulls the image (`--pull`).",
       "oneOf": [

@@ -151,6 +151,8 @@ impl Profile {
             &mut p.platform,
             &mut p.hostname,
             &mut p.mount_cwd,
+            &mut p.name,
+            &mut p.restart,
         ] {
             if let Some(value) = field {
                 *value = expand(value)?;
@@ -163,6 +165,16 @@ impl Profile {
             &mut p.add_hosts,
         ] {
             for value in list.iter_mut() {
+                *value = expand(value)?;
+            }
+        }
+        if let Some(build) = &mut p.build {
+            for field in [&mut build.context, &mut build.dockerfile, &mut build.target] {
+                if let Some(value) = field {
+                    *value = expand(value)?;
+                }
+            }
+            for value in build.args.values_mut() {
                 *value = expand(value)?;
             }
         }

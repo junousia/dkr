@@ -42,6 +42,28 @@ impl PullPolicy {
     }
 }
 
+/// Builds the image from a Dockerfile (`docker build`) before every run.
+/// The profile's `image` is used as the tag the build produces.
+#[derive(Debug, Deserialize, JsonSchema, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct Build {
+    /// Build context directory. Defaults to "." (where dkr is run from).
+    /// Supports `~`, `$VAR` and `$(command)` expansion.
+    #[serde(default)]
+    pub context: Option<String>,
+    /// Dockerfile path (`-f`), relative to where dkr is run from. Defaults
+    /// to `Dockerfile` inside the context.
+    #[serde(default)]
+    pub dockerfile: Option<String>,
+    /// Multi-stage build target (`--target`).
+    #[serde(default)]
+    pub target: Option<String>,
+    /// Build arguments (`--build-arg KEY=VALUE`). Values support `~`,
+    /// `$VAR` and `$(command)` expansion.
+    #[serde(default)]
+    pub args: HashMap<String, String>,
+}
+
 fn default_init() -> bool {
     true
 }
@@ -57,9 +79,10 @@ pub struct Profile {
     pub description: Option<String>,
     /// Name of another profile in the same directory to inherit from.
     /// Scalars set here replace the parent's; `env` is merged (this profile
-    /// wins); `volumes`, `ports`, `extra_args`, `env_file` and `add_hosts`
-    /// are appended after the parent's (a volume with the same `container`
-    /// path replaces the parent's). A parent may itself extend another.
+    /// wins); `build` is merged key by key (including `args`); `volumes`,
+    /// `ports`, `extra_args`, `env_file` and `add_hosts` are appended after
+    /// the parent's (a volume with the same `container` path replaces the
+    /// parent's). A parent may itself extend another.
     #[serde(default)]
     pub extends: Option<String>,
     /// The docker image to run, e.g. "myorg/myimage:latest". Supports
@@ -120,6 +143,25 @@ pub struct Profile {
     /// Raw extra `docker run` flags, appended verbatim before the image.
     #[serde(default)]
     pub extra_args: Vec<String>,
+    /// Build the image from a Dockerfile before every run (docker's layer
+    /// cache keeps this cheap). `image` is the tag the build produces.
+    /// Skip with `--no-build`.
+    #[serde(default)]
+    pub build: Option<Build>,
+    /// Run in the background (`docker run -d`) as a named, labelled
+    /// container instead of a one-off foreground command. Manage it with
+    /// `dkr <profile> --stop`, `--logs` and `dkr --ps`.
+    #[serde(default)]
+    pub detach: bool,
+    /// Container name (`--name`). For a detached profile it defaults to
+    /// `dkr-<profile>`.
+    #[serde(default)]
+    pub name: Option<String>,
+    /// Restart policy (`--restart`): no, always, unless-stopped or
+    /// on-failure[:max]. Requires `detach: true`; dkr then omits `--rm`
+    /// because docker forbids combining them.
+    #[serde(default)]
+    pub restart: Option<String>,
 }
 
 /// Returns the JSON Schema for [`Profile`], pretty-printed. Derived directly
@@ -171,6 +213,25 @@ pub fn validate(profile: &Profile) -> Vec<String> {
             syntax(format!("{name}[{i}]"), value);
         }
     }
+    if let Some(build) = &profile.build {
+        for (name, value) in [
+            ("build.context", &build.context),
+            ("build.dockerfile", &build.dockerfile),
+            ("build.target", &build.target),
+        ] {
+            if let Some(value) = value {
+                syntax(name.into(), value);
+            }
+        }
+        for (key, value) in &build.args {
+            syntax(format!("build.args.{key}"), value);
+        }
+    }
+    for (name, value) in [("name", &profile.name), ("restart", &profile.restart)] {
+        if let Some(value) = value {
+            syntax(name.into(), value);
+        }
+    }
 
     if profile.image.trim().is_empty() {
         problems.push("image must not be empty".to_string());
@@ -186,6 +247,39 @@ pub fn validate(profile: &Profile) -> Vec<String> {
     for key in profile.env.keys() {
         if key.trim().is_empty() {
             problems.push("env has an empty variable name".to_string());
+        }
+    }
+    if let Some(build) = &profile.build {
+        for (name, value) in [
+            ("build.context", &build.context),
+            ("build.dockerfile", &build.dockerfile),
+            ("build.target", &build.target),
+        ] {
+            if let Some(value) = value {
+                if value.trim().is_empty() {
+                    problems.push(format!("{name} must not be empty"));
+                }
+            }
+        }
+        if build.args.keys().any(|key| key.trim().is_empty()) {
+            problems.push("build.args has an empty name".to_string());
+        }
+    }
+    if let Some(name) = &profile.name {
+        if !name.contains('$') && !valid_container_name(name) {
+            problems.push(format!(
+                "name '{name}' is not a valid container name ([a-zA-Z0-9][a-zA-Z0-9_.-]*)"
+            ));
+        }
+    }
+    if let Some(restart) = &profile.restart {
+        if !profile.detach {
+            problems.push("restart requires detach: true".to_string());
+        }
+        if !restart.contains('$') && !valid_restart_policy(restart) {
+            problems.push(format!(
+                "restart '{restart}' should be no, always, unless-stopped or on-failure[:max]"
+            ));
         }
     }
     for (i, port) in profile.ports.iter().enumerate() {
@@ -357,6 +451,22 @@ pub fn valid_port_spec(port: &str) -> bool {
     range_ok && proto.is_none_or(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_alphabetic()))
 }
 
+/// Whether `name` is a valid docker container name.
+pub fn valid_container_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars.next().is_some_and(|c| c.is_ascii_alphanumeric())
+        && chars.all(|c| c.is_ascii_alphanumeric() || "_.-".contains(c))
+}
+
+/// Whether `policy` is a docker `--restart` value.
+pub fn valid_restart_policy(policy: &str) -> bool {
+    match policy.split_once(':') {
+        Some(("on-failure", max)) => !max.is_empty() && max.bytes().all(|b| b.is_ascii_digit()),
+        Some(_) => false,
+        None => ["no", "always", "unless-stopped", "on-failure"].contains(&policy),
+    }
+}
+
 fn read_profile_file(config_dir: &Path, name: &str) -> Result<(PathBuf, String), ConfigError> {
     let path = config_dir.join(format!("{name}.yaml"));
     let contents = std::fs::read_to_string(&path).map_err(|source| {
@@ -389,6 +499,23 @@ fn container_of(volume: &Value) -> Option<&str> {
     volume.get("container").and_then(Value::as_str)
 }
 
+/// Merges mapping `c` into `b`, with `c` winning per key, except that keys
+/// in `nested` which are mappings on both sides are merged one level deeper.
+fn merge_maps(mut b: serde_yaml::Mapping, c: serde_yaml::Mapping, nested: &[&str]) -> Value {
+    for (k, v) in c {
+        let merged = match (b.remove(&k), v) {
+            (Some(Value::Mapping(bm)), Value::Mapping(cm))
+                if nested.contains(&k.as_str().unwrap_or_default()) =>
+            {
+                merge_maps(bm, cm, &[])
+            }
+            (_, v) => v,
+        };
+        b.insert(k, merged);
+    }
+    Value::Mapping(b)
+}
+
 /// Overlays `child` onto `base` per the `extends` rules documented on
 /// [`Profile::extends`].
 fn merge_profiles(base: Value, child: Value) -> Value {
@@ -398,11 +525,9 @@ fn merge_profiles(base: Value, child: Value) -> Value {
     for (key, value) in child {
         let name = key.as_str().unwrap_or_default();
         let combined = match (merged.remove(&key), value) {
-            (Some(Value::Mapping(mut b)), Value::Mapping(c)) if name == "env" => {
-                for (k, v) in c {
-                    b.insert(k, v);
-                }
-                Value::Mapping(b)
+            (Some(Value::Mapping(b)), Value::Mapping(c)) if name == "env" => merge_maps(b, c, &[]),
+            (Some(Value::Mapping(b)), Value::Mapping(c)) if name == "build" => {
+                merge_maps(b, c, &["args"])
             }
             (Some(Value::Sequence(mut b)), Value::Sequence(c))
                 if APPENDED_LISTS.contains(&name) =>
@@ -470,6 +595,10 @@ impl Profile {
             ports: Vec::new(),
             entrypoint: None,
             extra_args: Vec::new(),
+            build: None,
+            detach: false,
+            name: None,
+            restart: None,
         }
     }
 

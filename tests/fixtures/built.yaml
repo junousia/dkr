@@ -1,0 +1,9 @@
+image: myapp:dev
+platform: linux/amd64
+build:
+  context: ./app
+  dockerfile: Dockerfile.dev
+  target: dev
+  args:
+    VERSION: "1.2.3"
+    A_FIRST: "x"

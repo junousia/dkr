@@ -20,5 +20,9 @@ extra_args:
 # hostname: dev
 # add_hosts: ["db:10.0.0.5"]
 # tty: true
+# build: { context: ., dockerfile: Dockerfile.dev, args: { REV: "$(git rev-parse HEAD)" } }
+# detach: true                  # run in the background (see dkr --ps/--stop/--logs)
+# name: my-service
+# restart: unless-stopped
 # Any string value can use $(command), e.g.:
 #   env: { API_TOKEN: "$(pass show api/token)" }
