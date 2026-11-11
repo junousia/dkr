@@ -8,6 +8,8 @@ semver pre-1.0).
 
 ## [Unreleased]
 
+## [0.6.0]
+
 ### Added
 
 - `build:` profile section: runs `docker build` (context, dockerfile,
